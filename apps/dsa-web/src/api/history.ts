@@ -43,11 +43,20 @@ export const historyApi = {
   },
 
   /**
-   * 获取历史报告详情
+   * 获取历史报告详情（通过 queryId）
    * @param queryId 分析记录唯一标识
    */
   getDetail: async (queryId: string): Promise<AnalysisReport> => {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/${queryId}`);
+    return toCamelCase<AnalysisReport>(response.data);
+  },
+
+  /**
+   * 获取历史报告详情（通过记录ID）
+   * @param id 记录唯一ID
+   */
+  getDetailById: async (id: string): Promise<AnalysisReport> => {
+    const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/by-id/${id}`);
     return toCamelCase<AnalysisReport>(response.data);
   },
 
@@ -66,5 +75,14 @@ export const historyApi = {
       total: data.total,
       items: (data.items || []).map(item => toCamelCase<NewsIntelItem>(item)),
     };
+  },
+
+  /**
+   * 删除历史记录
+   * @param id 记录唯一ID
+   */
+  deleteById: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/v1/history/by-id/${id}`);
+    return response.data;
   },
 };

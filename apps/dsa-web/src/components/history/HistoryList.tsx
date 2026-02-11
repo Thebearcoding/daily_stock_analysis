@@ -9,8 +9,9 @@ interface HistoryListProps {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  selectedQueryId?: string;
-  onItemClick: (queryId: string) => void;
+  selectedId?: string;
+  onItemClick: (id: string, queryId: string) => void;
+  onDelete: (id: string) => void;
   onLoadMore: () => void;
   className?: string;
 }
@@ -24,8 +25,9 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   isLoading,
   isLoadingMore,
   hasMore,
-  selectedQueryId,
+  selectedId,
   onItemClick,
+  onDelete,
   onLoadMore,
   className = '',
 }) => {
@@ -87,53 +89,70 @@ export const HistoryList: React.FC<HistoryListProps> = ({
         ) : (
           <div className="space-y-1.5">
             {items.map((item) => (
-              <button
-                key={item.queryId}
-                type="button"
-                onClick={() => onItemClick(item.queryId)}
-                className={`history-item w-full text-left ${selectedQueryId === item.queryId ? 'active' : ''
-                  }`}
+              <div
+                key={item.id}
+                className={`history-item group relative ${selectedId === item.id ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-2 w-full">
-                  {/* 情感分数指示条 */}
-                  {item.sentimentScore !== undefined && (
-                    <span
-                      className="w-0.5 h-8 rounded-full flex-shrink-0"
-                      style={{
-                        backgroundColor: getSentimentColor(item.sentimentScore),
-                        boxShadow: `0 0 6px ${getSentimentColor(item.sentimentScore)}40`
-                      }}
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="font-medium text-white truncate text-xs">
-                        {item.stockName || item.stockCode}
-                      </span>
-                      {item.sentimentScore !== undefined && (
-                        <span
-                          className="text-xs font-mono font-semibold px-1 py-0.5 rounded"
-                          style={{
-                            color: getSentimentColor(item.sentimentScore),
-                            backgroundColor: `${getSentimentColor(item.sentimentScore)}15`
-                          }}
-                        >
-                          {item.sentimentScore}
+                <button
+                  type="button"
+                  onClick={() => onItemClick(item.id, item.queryId)}
+                  className="w-full text-left pr-6"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    {/* 情感分数指示条 */}
+                    {item.sentimentScore !== undefined && (
+                      <span
+                        className="w-0.5 h-8 rounded-full flex-shrink-0"
+                        style={{
+                          backgroundColor: getSentimentColor(item.sentimentScore),
+                          boxShadow: `0 0 6px ${getSentimentColor(item.sentimentScore)}40`
+                        }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="font-medium text-white truncate text-xs">
+                          {item.stockName || item.stockCode}
                         </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-xs text-muted font-mono">
-                        {item.stockCode}
-                      </span>
-                      <span className="text-xs text-muted/50">·</span>
-                      <span className="text-xs text-muted">
-                        {formatDateTime(item.createdAt)}
-                      </span>
+                        {item.sentimentScore !== undefined && (
+                          <span
+                            className="text-xs font-mono font-semibold px-1 py-0.5 rounded"
+                            style={{
+                              color: getSentimentColor(item.sentimentScore),
+                              backgroundColor: `${getSentimentColor(item.sentimentScore)}15`
+                            }}
+                          >
+                            {item.sentimentScore}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-muted font-mono">
+                          {item.stockCode}
+                        </span>
+                        <span className="text-xs text-muted/50">·</span>
+                        <span className="text-xs text-muted">
+                          {formatDateTime(item.createdAt)}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                {/* 删除按钮 */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.id);
+                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-danger"
+                  title="删除"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             ))}
 
             {/* 加载更多触发器 */}

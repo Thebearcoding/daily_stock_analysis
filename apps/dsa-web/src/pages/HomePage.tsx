@@ -33,6 +33,7 @@ const HomePage: React.FC = () => {
 
   // 报告详情状态
   const [selectedReport, setSelectedReport] = useState<AnalysisReport | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
 
   // 任务队列状态
@@ -122,9 +123,10 @@ const HomePage: React.FC = () => {
       // 如果需要自动选择第一条，且有数据，且当前没有选中报告
       if (autoSelectFirst && response.items.length > 0 && !selectedReport) {
         const firstItem = response.items[0];
+        setSelectedId(firstItem.id);
         setIsLoadingReport(true);
         try {
-          const report = await historyApi.getDetail(firstItem.queryId);
+          const report = await historyApi.getDetailById(firstItem.id);
           setSelectedReport(report);
         } catch (err) {
           console.error('Failed to fetch first report:', err);
@@ -153,18 +155,40 @@ const HomePage: React.FC = () => {
   }, []);
 
   // 点击历史项加载报告
-  const handleHistoryClick = async (queryId: string) => {
+  const handleHistoryClick = async (id: string, _queryId: string) => {
     // 取消当前分析请求的结果显示（通过递增 requestId）
     analysisRequestIdRef.current += 1;
 
+    setSelectedId(id);
     setIsLoadingReport(true);
     try {
-      const report = await historyApi.getDetail(queryId);
+      const report = await historyApi.getDetailById(id);
       setSelectedReport(report);
     } catch (err) {
       console.error('Failed to fetch report:', err);
     } finally {
       setIsLoadingReport(false);
+    }
+  };
+
+  // 删除历史记录
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('确定要删除这条记录吗？')) {
+      return;
+    }
+
+    try {
+      await historyApi.deleteById(id);
+      // 从列表中移除
+      setHistoryItems(prev => prev.filter(item => item.id !== id));
+      // 如果删除的是当前选中的，清空选中状态
+      if (selectedId === id) {
+        setSelectedId(null);
+        setSelectedReport(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete:', err);
+      setStoreError('删除失败');
     }
   };
 
@@ -281,8 +305,9 @@ const HomePage: React.FC = () => {
             isLoading={isLoadingHistory}
             isLoadingMore={isLoadingMore}
             hasMore={hasMore}
-            selectedQueryId={selectedReport?.meta.queryId}
+            selectedId={selectedId || undefined}
             onItemClick={handleHistoryClick}
+            onDelete={handleDelete}
             onLoadMore={handleLoadMore}
             className="max-h-[62vh] overflow-hidden"
           />

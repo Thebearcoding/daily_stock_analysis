@@ -84,6 +84,7 @@ def get_history_list(
         # 转换为响应模型
         items = [
             HistoryItem(
+                id=item.get("id", ""),
                 query_id=item.get("query_id", ""),
                 stock_code=item.get("stock_code", ""),
                 stock_name=item.get("stock_name"),
@@ -109,6 +110,103 @@ def get_history_list(
             detail={
                 "error": "internal_error",
                 "message": f"查询历史列表失败: {str(e)}"
+            }
+        )
+
+
+@router.get(
+    "/by-id/{record_id}",
+    response_model=AnalysisReport,
+    responses={
+        200: {"description": "报告详情"},
+        404: {"description": "报告不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="通过记录ID获取历史报告详情",
+    description="根据记录唯一ID获取完整的历史分析报告"
+)
+def get_history_detail_by_id(
+    record_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager)
+) -> AnalysisReport:
+    """
+    通过记录ID获取历史报告详情
+    """
+    try:
+        service = HistoryService(db_manager)
+        result = service.get_history_detail_by_id(record_id)
+
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到 id={record_id} 的分析记录"
+                }
+            )
+
+        # 从 context_snapshot 中提取价格信息
+        current_price = None
+        change_pct = None
+        context_snapshot = result.get("context_snapshot")
+        if context_snapshot and isinstance(context_snapshot, dict):
+            enhanced_context = context_snapshot.get("enhanced_context") or {}
+            realtime = enhanced_context.get("realtime") or {}
+            current_price = realtime.get("price")
+            change_pct = realtime.get("change_pct") or realtime.get("change_60d")
+
+            if current_price is None:
+                realtime_quote_raw = context_snapshot.get("realtime_quote_raw") or {}
+                current_price = realtime_quote_raw.get("price")
+                change_pct = change_pct or realtime_quote_raw.get("change_pct") or realtime_quote_raw.get("pct_chg")
+
+        meta = ReportMeta(
+            query_id=result.get("query_id", ""),
+            stock_code=result.get("stock_code", ""),
+            stock_name=result.get("stock_name"),
+            report_type=result.get("report_type"),
+            created_at=result.get("created_at"),
+            current_price=current_price,
+            change_pct=change_pct
+        )
+
+        summary = ReportSummary(
+            analysis_summary=result.get("analysis_summary"),
+            operation_advice=result.get("operation_advice"),
+            trend_prediction=result.get("trend_prediction"),
+            sentiment_score=result.get("sentiment_score"),
+            sentiment_label=result.get("sentiment_label")
+        )
+
+        strategy = ReportStrategy(
+            ideal_buy=result.get("ideal_buy"),
+            secondary_buy=result.get("secondary_buy"),
+            stop_loss=result.get("stop_loss"),
+            take_profit=result.get("take_profit")
+        )
+
+        details = ReportDetails(
+            news_content=result.get("news_content"),
+            raw_result=result.get("raw_result"),
+            context_snapshot=result.get("context_snapshot")
+        )
+
+        return AnalysisReport(
+            meta=meta,
+            summary=summary,
+            strategy=strategy,
+            details=details
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询历史详情失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"查询历史详情失败: {str(e)}"
             }
         )
 
@@ -278,5 +376,50 @@ def get_history_news(
             detail={
                 "error": "internal_error",
                 "message": f"查询新闻情报失败: {str(e)}"
+            }
+        )
+
+
+@router.delete(
+    "/by-id/{record_id}",
+    responses={
+        200: {"description": "删除成功"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="删除历史记录",
+    description="根据记录唯一ID删除历史分析报告"
+)
+def delete_history_by_id(
+    record_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager)
+) -> dict:
+    """
+    删除历史记录
+    """
+    try:
+        service = HistoryService(db_manager)
+        success = service.delete_history_by_id(record_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到 id={record_id} 的分析记录"
+                }
+            )
+
+        return {"success": True, "message": f"已删除记录 id={record_id}"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除历史记录失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"删除历史记录失败: {str(e)}"
             }
         )

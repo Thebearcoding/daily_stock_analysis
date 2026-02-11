@@ -637,7 +637,43 @@ class DatabaseManager:
             ).scalars().all()
 
             return list(results)
-    
+
+    def get_analysis_history_by_id(self, record_id: int) -> Optional[AnalysisHistory]:
+        """
+        根据记录ID获取单条分析历史
+
+        Args:
+            record_id: 记录唯一ID
+
+        Returns:
+            AnalysisHistory 对象，不存在返回 None
+        """
+        with self.get_session() as session:
+            result = session.execute(
+                select(AnalysisHistory).where(AnalysisHistory.id == record_id)
+            ).scalar_one_or_none()
+            return result
+
+    def delete_analysis_history_by_id(self, record_id: int) -> bool:
+        """
+        根据记录ID删除单条分析历史
+
+        Args:
+            record_id: 记录唯一ID
+
+        Returns:
+            是否删除成功
+        """
+        with self.get_session() as session:
+            result = session.execute(
+                select(AnalysisHistory).where(AnalysisHistory.id == record_id)
+            ).scalar_one_or_none()
+            if result:
+                session.delete(result)
+                session.commit()
+                return True
+            return False
+
     def get_analysis_history_paginated(
         self,
         code: Optional[str] = None,

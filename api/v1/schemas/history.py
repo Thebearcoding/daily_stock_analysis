@@ -16,8 +16,9 @@ from pydantic import BaseModel, Field
 
 class HistoryItem(BaseModel):
     """历史记录摘要（列表展示用）"""
-    
-    query_id: str = Field(..., description="分析记录唯一标识")
+
+    id: str = Field(..., description="记录唯一ID")
+    query_id: str = Field(..., description="批次标识（同一批分析共享）")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
     report_type: Optional[str] = Field(None, description="报告类型")
@@ -33,6 +34,7 @@ class HistoryItem(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
+                "id": "1",
                 "query_id": "abc123",
                 "stock_code": "600519",
                 "stock_name": "贵州茅台",
