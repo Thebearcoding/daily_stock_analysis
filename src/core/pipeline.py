@@ -169,7 +169,7 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
     
-    def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
+    def analyze_stock(self, code: str, report_type: ReportType, query_id: str, persist_history: bool = True) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
         
@@ -377,7 +377,7 @@ class StockAnalysisPipeline:
                 fill_chip_structure_if_needed(result, chip_data)
 
             # Step 8: 保存分析历史记录
-            if result:
+            if result and persist_history:
                 try:
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
@@ -946,6 +946,7 @@ class StockAnalysisPipeline:
         single_stock_notify: bool = False,
         report_type: ReportType = ReportType.SIMPLE,
         analysis_query_id: Optional[str] = None,
+        persist_history: bool = True,
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -984,7 +985,7 @@ class StockAnalysisPipeline:
                 return None
             
             effective_query_id = analysis_query_id or self.query_id or uuid.uuid4().hex
-            result = self.analyze_stock(code, report_type, query_id=effective_query_id)
+            result = self.analyze_stock(code, report_type, query_id=effective_query_id, persist_history=persist_history)
             
             if result:
                 logger.info(

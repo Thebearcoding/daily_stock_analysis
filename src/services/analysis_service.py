@@ -36,18 +36,21 @@ class AnalysisService:
         report_type: str = "detailed",
         force_refresh: bool = False,
         query_id: Optional[str] = None,
-        send_notification: bool = True
+        send_notification: bool = True,
+        persist_history: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
-        
+
         Args:
             stock_code: 股票代码
             report_type: 报告类型 (simple/detailed)
             force_refresh: 是否强制刷新
             query_id: 查询 ID（可选）
             send_notification: 是否发送通知（API 触发默认发送）
-            
+            persist_history: 是否持久化到 analysis_history（默认 True）。
+                基金 deep 分析内部调用时传 False，由基金入口统一写入。
+
         Returns:
             分析结果字典，包含:
             - stock_code: 股票代码
@@ -87,7 +90,8 @@ class AnalysisService:
                 code=stock_code,
                 skip_analysis=False,
                 single_stock_notify=send_notification,
-                report_type=rt
+                report_type=rt,
+                persist_history=persist_history,
             )
             
             if result is None:

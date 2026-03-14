@@ -11,6 +11,7 @@
 """
 
 import logging
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -18,6 +19,7 @@ import pandas as pd
 
 from src.services.analysis_service import AnalysisService
 from src.services.stock_service import StockService
+from src.storage import DatabaseManager
 from src.stock_analyzer import (
     BuySignal,
     MACDStatus,
@@ -410,6 +412,7 @@ class FundAdviceService:
                 report_type="detailed",
                 force_refresh=False,
                 send_notification=False,
+                persist_history=False,
             )
         except Exception as e:
             logger.warning(f"{fund_code} 深度分析执行失败: {e}", exc_info=True)
@@ -572,3 +575,114 @@ class FundAdviceService:
             mode=mode,
             fund_code=fund_code,
         )
+
+    # ── Phase 2B: 基金持久化单 owner 入口 ──
+
+    def analyze_and_persist(
+        self,
+        fund_code: str,
+        days: int = 120,
+        mode: str = FAST_MODE,
+        query_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        分析基金并持久化到 analysis_history。
+
+        这是基金记录的**唯一持久化入口**。
+        fast / deep 最终都只写一条 fund_advice 记录。
+
+        Args:
+            fund_code: 基金代码
+            days: 历史数据天数
+            mode: 分析模式 (fast/deep)
+            query_id: 查询链路 ID（可选，异步任务会传入）
+
+        Returns:
+            包含 record_id 的结果字典，失败返回 None
+        """
+        if query_id is None:
+            query_id = uuid.uuid4().hex
+
+        # Step 1: 获取建议（不写历史）
+        advice = self.get_advice(fund_code=fund_code, days=days, mode=mode)
+        if advice is None:
+            logger.warning(f"[{fund_code}] analyze_and_persist: get_advice 返回 None")
+            return None
+
+        # Step 2: 构建基金专用 raw_result 快照
+        analysis_code = advice.get("analysis_code") or fund_code
+        analysis_name = advice.get("analysis_name") or advice.get("fund_name")
+        analysis_mode = advice.get("analysis_mode") or mode
+
+        raw_result = {
+            "asset_type": "fund",
+            "analysis_kind": "fund_advice",
+            "analysis_mode": analysis_mode,
+            "input_code": advice.get("fund_code") or fund_code,
+            "input_name": advice.get("fund_name"),
+            "analysis_code": analysis_code,
+            "analysis_name": analysis_name,
+            "mapping_note": advice.get("mapping_note"),
+            "advice": {
+                "action": advice.get("action"),
+                "action_label": advice.get("action_label"),
+                "confidence_score": advice.get("confidence_score"),
+                "confidence_level": advice.get("confidence_level"),
+                "strategy": advice.get("strategy"),
+                "reasons": advice.get("reasons"),
+                "risk_factors": advice.get("risk_factors"),
+                "rule_assessment": advice.get("rule_assessment"),
+            },
+            "indicators": {
+                "current_price": advice.get("current_price"),
+                "trend_status": advice.get("trend_status"),
+                "buy_signal": advice.get("buy_signal"),
+                "signal_score": advice.get("signal_score"),
+                "ma5": advice.get("ma5"),
+                "ma10": advice.get("ma10"),
+                "ma20": advice.get("ma20"),
+                "ma60": advice.get("ma60"),
+                "volume_status": advice.get("volume_status"),
+                "volume_ratio_5d": advice.get("volume_ratio_5d"),
+                "macd": advice.get("macd"),
+                "rsi": advice.get("rsi"),
+            },
+            "deep_analysis": advice.get("deep_analysis"),
+        }
+
+        # Step 3: 掛接操作建议摘要（存到结构化字段便于列表页展示）
+        operation_advice = advice.get("action")
+        summary_parts = []
+        if advice.get("action_label"):
+            summary_parts.append(advice["action_label"])
+        if advice.get("reasons"):
+            summary_parts.append("; ".join(advice["reasons"][:2]))
+        analysis_summary = " | ".join(summary_parts) if summary_parts else None
+
+        # Step 4: 写入单条基金历史记录
+        db = DatabaseManager.get_instance()
+        record_id = db.save_fund_advice_history(
+            query_id=query_id,
+            fund_code=advice.get("fund_code") or fund_code,
+            fund_name=advice.get("fund_name"),
+            analysis_code=analysis_code,
+            analysis_name=analysis_name,
+            analysis_mode=analysis_mode,
+            raw_result=raw_result,
+            operation_advice=operation_advice,
+            analysis_summary=analysis_summary,
+        )
+
+        if record_id == 0:
+            logger.error(f"[{fund_code}] analyze_and_persist: 保存历史失败")
+            return None
+
+        return {
+            "record_id": record_id,
+            "query_id": query_id,
+            "fund_code": advice.get("fund_code") or fund_code,
+            "analysis_code": analysis_code,
+            "analysis_mode": analysis_mode,
+            "action": operation_advice,
+            "advice": advice,
+        }

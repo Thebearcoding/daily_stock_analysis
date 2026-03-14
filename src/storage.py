@@ -208,7 +208,8 @@ class AnalysisHistory(Base):
     """
     分析结果历史记录模型
 
-    保存每次分析结果，支持按 query_id/股票代码检索
+    保存每次分析结果，支持按 query_id/股票代码检索。
+    同时支持股票和基金两种标的类型（asset_type 区分）。
     """
     __tablename__ = 'analysis_history'
 
@@ -217,10 +218,22 @@ class AnalysisHistory(Base):
     # 关联查询链路
     query_id = Column(String(64), index=True)
 
-    # 股票信息
+    # 标的信息（股票直接使用，基金存 ETF 代码/名称）
     code = Column(String(10), nullable=False, index=True)
     name = Column(String(50))
     report_type = Column(String(16), index=True)
+
+    # ── Phase 2A 新增：领域维度字段 ──
+    # 标的类型：stock / fund
+    asset_type = Column(String(16), nullable=False, default='stock', index=True)
+    # 分析业务类型：stock_analysis / fund_advice
+    analysis_kind = Column(String(32), nullable=False, default='stock_analysis', index=True)
+    # 分析模式（仅基金）：fast / deep
+    analysis_mode = Column(String(16), nullable=True)
+    # 用户输入的原始代码（仅基金，存基金代码而非 ETF 代码）
+    input_code = Column(String(16), nullable=True, index=True)
+    # 用户输入的原始名称（仅基金，存基金名称而非 ETF 名称）
+    input_name = Column(String(128), nullable=True)
 
     # 核心结论
     sentiment_score = Column(Integer)
@@ -243,6 +256,8 @@ class AnalysisHistory(Base):
 
     __table_args__ = (
         Index('ix_analysis_code_time', 'code', 'created_at'),
+        Index('ix_analysis_asset_type', 'asset_type', 'created_at'),
+        Index('ix_analysis_input_code', 'input_code', 'created_at'),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -253,6 +268,11 @@ class AnalysisHistory(Base):
             'code': self.code,
             'name': self.name,
             'report_type': self.report_type,
+            'asset_type': self.asset_type,
+            'analysis_kind': self.analysis_kind,
+            'analysis_mode': self.analysis_mode,
+            'input_code': self.input_code,
+            'input_name': self.input_name,
             'sentiment_score': self.sentiment_score,
             'operation_advice': self.operation_advice,
             'trend_prediction': self.trend_prediction,
@@ -860,6 +880,119 @@ class DatabaseManager:
             except Exception as e:
                 session.rollback()
                 logger.error(f"保存分析历史失败: {e}")
+                return 0
+
+    @staticmethod
+    def _validate_analysis_identity(
+        asset_type: str,
+        analysis_kind: str,
+        code: str,
+        input_code: Optional[str] = None,
+    ) -> None:
+        """
+        校验持久化记录的领域身份约束（集中在 writer 层做单点兜底）。
+
+        Rules:
+        - fund_advice -> asset_type == 'fund', input_code 必填
+        - stock_analysis -> asset_type == 'stock'
+        """
+        if analysis_kind == 'fund_advice':
+            if asset_type != 'fund':
+                raise ValueError(
+                    f"analysis_kind='fund_advice' 要求 asset_type='fund'，"
+                    f"实际收到 asset_type='{asset_type}'"
+                )
+            if not input_code:
+                raise ValueError(
+                    "analysis_kind='fund_advice' 要求 input_code 不为空"
+                )
+            if not code:
+                raise ValueError(
+                    "analysis_kind='fund_advice' 要求 code（实际分析 ETF 代码）不为空"
+                )
+        elif analysis_kind == 'stock_analysis':
+            if asset_type != 'stock':
+                raise ValueError(
+                    f"analysis_kind='stock_analysis' 要求 asset_type='stock'，"
+                    f"实际收到 asset_type='{asset_type}'"
+                )
+
+    def save_fund_advice_history(
+        self,
+        query_id: str,
+        fund_code: str,
+        fund_name: Optional[str],
+        analysis_code: str,
+        analysis_name: Optional[str],
+        analysis_mode: str,
+        raw_result: Dict[str, Any],
+        operation_advice: Optional[str] = None,
+        analysis_summary: Optional[str] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None,
+    ) -> int:
+        """
+        保存基金建议历史记录（Phase 2A）。
+
+        持久化 owner：FundAdviceService.analyze_and_persist()。
+        一条基金请求最终只允许调用此方法一次。
+
+        Args:
+            query_id: 查询链路 ID
+            fund_code: 用户输入的基金代码 -> input_code
+            fund_name: 用户输入的基金名称 -> input_name
+            analysis_code: 实际分析 ETF 代码 -> code
+            analysis_name: 实际分析 ETF 名称 -> name
+            analysis_mode: fast / deep
+            raw_result: 基金专用快照 dict
+            operation_advice: 操作建议（如 wait/buy/reduce）
+            analysis_summary: 分析摘要文本
+            stop_loss: 止损价
+            take_profit: 止盈价
+
+        Returns:
+            写入记录的 id，失败返回 0
+        """
+        self._validate_analysis_identity(
+            asset_type='fund',
+            analysis_kind='fund_advice',
+            code=analysis_code,
+            input_code=fund_code,
+        )
+
+        report_type = 'simple' if analysis_mode == 'fast' else 'full'
+
+        record = AnalysisHistory(
+            query_id=query_id,
+            code=analysis_code,
+            name=analysis_name,
+            report_type=report_type,
+            asset_type='fund',
+            analysis_kind='fund_advice',
+            analysis_mode=analysis_mode,
+            input_code=fund_code,
+            input_name=fund_name,
+            operation_advice=operation_advice,
+            analysis_summary=analysis_summary,
+            raw_result=self._safe_json_dumps(raw_result),
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            created_at=datetime.now(),
+        )
+
+        with self.get_session() as session:
+            try:
+                session.add(record)
+                session.commit()
+                logger.info(
+                    f"保存基金建议历史成功: fund_code={fund_code}, "
+                    f"analysis_code={analysis_code}, mode={analysis_mode}, "
+                    f"record_id={record.id}"
+                )
+                return record.id
+            except Exception as e:
+                session.rollback()
+                logger.error(f"保存基金建议历史失败: {e}")
                 return 0
 
     def get_analysis_history(
