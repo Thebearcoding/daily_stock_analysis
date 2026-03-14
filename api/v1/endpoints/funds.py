@@ -13,7 +13,7 @@ import logging
 import re
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.funds import FundAdviceResponse
@@ -22,6 +22,17 @@ from src.services.fund_advice_service import FundAdviceService
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 模块级单例（与上游 stock endpoint 模式一致）
+_fund_advice_service: FundAdviceService | None = None
+
+
+def get_fund_advice_service() -> FundAdviceService:
+    """FastAPI 依赖注入：返回 FundAdviceService 单例。"""
+    global _fund_advice_service
+    if _fund_advice_service is None:
+        _fund_advice_service = FundAdviceService()
+    return _fund_advice_service
 
 
 @router.get(
@@ -40,6 +51,7 @@ def get_fund_advice(
     fund_code: str,
     days: int = Query(120, ge=60, le=365, description="分析历史天数"),
     mode: Literal["fast", "deep"] = Query("fast", description="分析模式：fast 快速规则 / deep 深度分析"),
+    service: FundAdviceService = Depends(get_fund_advice_service),
 ) -> FundAdviceResponse:
     """
     获取基金策略建议。
@@ -48,6 +60,7 @@ def get_fund_advice(
         fund_code: 基金代码（6位数字）
         days: 历史数据天数
         mode: 分析模式
+        service: 注入的 FundAdviceService 实例
     """
     normalized_code = fund_code.strip()
     if not re.match(r"^\d{6}$", normalized_code):
@@ -60,7 +73,6 @@ def get_fund_advice(
         )
 
     try:
-        service = FundAdviceService()
         result = service.get_advice(normalized_code, days=days, mode=mode)
     except Exception as e:
         logger.error(f"获取基金建议失败: {e}", exc_info=True)
@@ -82,3 +94,4 @@ def get_fund_advice(
         )
 
     return FundAdviceResponse(**result)
+

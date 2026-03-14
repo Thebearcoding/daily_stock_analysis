@@ -93,6 +93,17 @@ class FundAdviceService:
 
         return df
 
+    @staticmethod
+    def _default_rule_assessment() -> Dict[str, Any]:
+        """规则判定的默认空结构。"""
+        return {
+            "entry_rule": "前大后小，金叉就搞",
+            "exit_rule": "前高后低，放量就跑",
+            "entry_ready": False,
+            "exit_triggered": False,
+            "comment": "数据不足，暂无法完成规则判断",
+        }
+
     def _evaluate_rule_assessment(
         self,
         df: pd.DataFrame,
@@ -102,15 +113,13 @@ class FundAdviceService:
         规则评估：
         - 入场：前大后小 + 金叉（含上穿零轴）
         - 离场：前高后低 + 放量 / MACD 转弱
+
+        注意：此处需要最近 3 根 MACD 柱状值来判断柱体趋势，
+        但 TrendAnalysisResult 仅保存最新 1 根 bar。
+        因此从 DataFrame 重新计算，使用 analyzer 的 MACD 参数保持一致。
         """
         if df.empty or len(df) < 3:
-            return {
-                "entry_rule": "前大后小，金叉就搞",
-                "exit_rule": "前高后低，放量就跑",
-                "entry_ready": False,
-                "exit_triggered": False,
-                "comment": "数据不足，暂无法完成规则判断",
-            }
+            return self._default_rule_assessment()
 
         close = pd.to_numeric(df["close"], errors="coerce").ffill().bfill()
         ema_fast = close.ewm(span=self.analyzer.MACD_FAST, adjust=False).mean()
@@ -197,12 +206,15 @@ class FundAdviceService:
         action: str,
         rule_assessment: Dict[str, Any],
     ) -> Tuple[int, str]:
-        """生成置信度分数和等级。"""
+        """
+        生成置信度分数和等级。
+
+        置信度反映的是"建议的确信程度"，而非行情方向。
+        空头防守时不应人为拉高置信度，观望=不确定性高。
+        """
         confidence_score = int(result.signal_score)
 
-        if self._is_bearish_guard_state(result) and action == "wait":
-            confidence_score = max(confidence_score, 72)
-
+        # 仅当规则明确触发时才适度加分
         if rule_assessment.get("entry_ready") or rule_assessment.get("exit_triggered"):
             confidence_score += 10
 
@@ -270,6 +282,26 @@ class FundAdviceService:
             "position_advice": position_text,
         }
 
+    def _build_base_advice(
+        self,
+        fund_code: str,
+        history: Dict[str, Any],
+        latest_date: str,
+    ) -> Dict[str, Any]:
+        """
+        构建基金建议的公共骨架字典（元信息部分）。
+        正常路径和低数据路径共用此结构，避免两处平行维护。
+        """
+        return {
+            "fund_code": fund_code,
+            "analysis_code": history.get("analysis_code") or fund_code,
+            "mapped_from": history.get("mapped_from"),
+            "mapping_note": history.get("mapping_note"),
+            "fund_name": history.get("stock_name"),
+            "latest_date": latest_date,
+            "data_source": history.get("data_source"),
+        }
+
     def _build_low_data_advice(
         self,
         fund_code: str,
@@ -289,14 +321,8 @@ class FundAdviceService:
         add_low = self._safe_float(close_price * 0.98)
         add_high = self._safe_float(close_price * 0.99)
 
-        return {
-            "fund_code": fund_code,
-            "analysis_code": history.get("analysis_code") or fund_code,
-            "mapped_from": history.get("mapped_from"),
-            "mapping_note": history.get("mapping_note"),
-            "fund_name": history.get("stock_name"),
-            "latest_date": latest_date,
-            "data_source": history.get("data_source"),
+        advice = self._build_base_advice(fund_code, history, latest_date)
+        advice.update({
             "action": "wait",
             "action_label": "防守观望",
             "confidence_level": "低",
@@ -312,40 +338,28 @@ class FundAdviceService:
             "volume_status": "量能信息有限",
             "volume_ratio_5d": 0.0,
             "macd": {
-                "dif": 0.0,
-                "dea": 0.0,
-                "bar": 0.0,
+                "dif": 0.0, "dea": 0.0, "bar": 0.0,
                 "status": "数据不足",
                 "signal": "历史数据不足，无法形成有效 MACD 结构",
             },
             "rsi": {
-                "rsi6": 50.0,
-                "rsi12": 50.0,
-                "rsi24": 50.0,
+                "rsi6": 50.0, "rsi12": 50.0, "rsi24": 50.0,
                 "status": "数据不足",
                 "signal": "历史数据不足，RSI 仅作中性参考",
             },
-            "rule_assessment": {
-                "entry_rule": "前大后小，金叉就搞",
-                "exit_rule": "前高后低，放量就跑",
-                "entry_ready": False,
-                "exit_triggered": False,
-                "comment": "历史样本不足，规则判定暂不生效",
-            },
+            "rule_assessment": self._default_rule_assessment(),
             "strategy": {
                 "buy_zone": {
-                    "low": buy_low,
-                    "high": buy_high,
+                    "low": buy_low, "high": buy_high,
                     "description": "仅可小仓试探，等待更多净值样本",
                 },
                 "add_zone": {
-                    "low": add_low,
-                    "high": add_high,
+                    "low": add_low, "high": add_high,
                     "description": "建议暂不加仓，待数据完整后再评估",
                 },
                 "stop_loss": self._safe_float(close_price * 0.95),
                 "take_profit": self._safe_float(close_price * 1.05),
-                "position_advice": "样本仅 {0} 天，保持轻仓/空仓观察".format(sample_days),
+                "position_advice": f"样本仅 {sample_days} 天，保持轻仓/空仓观察",
             },
             "reasons": [
                 f"仅获取到 {sample_days} 个交易日数据，先以观察为主",
@@ -356,7 +370,8 @@ class FundAdviceService:
                 "缺少完整趋势周期，容易出现信号失真",
             ],
             "generated_at": datetime.now().isoformat(),
-        }
+        })
+        return advice
 
     def _build_deep_analysis(self, fund_code: str) -> Dict[str, Any]:
         """调用深度分析流水线，返回可嵌入基金结果的结构化摘要。"""
@@ -516,14 +531,8 @@ class FundAdviceService:
         if self._is_bearish_guard_state(result):
             risks.append("均线空头且未站上 MA20，默认防守观望")
 
-        advice = {
-            "fund_code": fund_code,
-            "analysis_code": analysis_code,
-            "mapped_from": history.get("mapped_from"),
-            "mapping_note": history.get("mapping_note"),
-            "fund_name": history.get("stock_name"),
-            "latest_date": latest_date,
-            "data_source": history.get("data_source"),
+        advice = self._build_base_advice(fund_code, history, latest_date)
+        advice.update({
             "action": action,
             "action_label": action_label,
             "confidence_level": confidence_level,
@@ -557,7 +566,7 @@ class FundAdviceService:
             "reasons": list(dict.fromkeys(reasons)),
             "risk_factors": list(dict.fromkeys(risks)),
             "generated_at": datetime.now().isoformat(),
-        }
+        })
         return self._attach_analysis_mode(
             advice=advice,
             mode=mode,

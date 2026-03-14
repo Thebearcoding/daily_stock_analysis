@@ -14,8 +14,9 @@
 
 import logging
 import re
+import time
+import threading
 from typing import List, Optional, Tuple, Dict
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 # 单次基金映射查询超时（秒），避免前端请求被外部接口拖死
 FUND_MAPPING_TIMEOUT_SECONDS = 8
+
+# 模块级线程池（单 worker），避免每次查询都创建销毁
+_mapping_executor = ThreadPoolExecutor(max_workers=1)
+
+# 简易 TTL 缓存：{fund_code: (result, timestamp)}
+_mapping_cache: Dict[str, Tuple[Optional[Tuple[str, str, str]], float]] = {}
+_mapping_cache_lock = threading.Lock()
+_CACHE_TTL_SECONDS = 86400  # 24 小时
 
 
 # 常见场外基金 → ETF 静态映射（作为API查询的兜底）
@@ -43,7 +52,6 @@ FUND_ETF_STATIC_MAP: Dict[str, str] = {
     "001633": "159928",
     # 白酒
     "003095": "512690",  # 白酒ETF
-    "012414": "512690",
     # 军工
     "004224": "512660",  # 军工ETF
     "004225": "512660",
@@ -136,6 +144,8 @@ def is_otc_fund_code(code: str) -> bool:
         '000', '001', '002', '003',  # 深证主板/中小板
         '300', '301',                 # 创业板
         '688', '689',                 # 科创板
+        '830', '831', '870', '871',   # 北交所/新三板
+        '920',                         # 存托凭证 CDR
         '510', '511', '512', '513', '515', '516', '517', '518', '560', '561', '562', '563',  # 上证ETF
         '159', '150', '160', '161', '162', '163', '164',  # 深证ETF/LOF
     ]
@@ -148,10 +158,9 @@ def is_otc_fund_code(code: str) -> bool:
     return True
 
 
-@lru_cache(maxsize=1024)
 def get_fund_etf_mapping(fund_code: str) -> Optional[Tuple[str, str, str]]:
     """
-    将场外基金代码映射到对应的场内ETF
+    将场外基金代码映射到对应的场内ETF（带 TTL 缓存）
 
     Args:
         fund_code: 场外基金代码
@@ -159,17 +168,30 @@ def get_fund_etf_mapping(fund_code: str) -> Optional[Tuple[str, str, str]]:
     Returns:
         (etf_code, fund_name, etf_name) 或 None
     """
+    # 0. 检查 TTL 缓存
+    now = time.monotonic()
+    with _mapping_cache_lock:
+        if fund_code in _mapping_cache:
+            cached_result, cached_at = _mapping_cache[fund_code]
+            if now - cached_at < _CACHE_TTL_SECONDS:
+                return cached_result
+            del _mapping_cache[fund_code]
+
     # 1. 先查静态映射
     if fund_code in FUND_ETF_STATIC_MAP:
         etf_code = FUND_ETF_STATIC_MAP[fund_code]
         logger.info(f"[基金映射] {fund_code} -> {etf_code} (静态映射)")
-        return etf_code, f"基金{fund_code}", f"ETF{etf_code}"
+        result = etf_code, f"基金{fund_code}", f"ETF{etf_code}"
+        with _mapping_cache_lock:
+            _mapping_cache[fund_code] = (result, now)
+        return result
 
-    # 2. 通过 akshare API 查询（带超时降级）
-    executor = ThreadPoolExecutor(max_workers=1)
+    # 2. 通过 akshare API 查询（使用模块级线程池，带超时降级）
     try:
-        future = executor.submit(_query_fund_mapping_via_akshare, fund_code)
+        future = _mapping_executor.submit(_query_fund_mapping_via_akshare, fund_code)
         result = future.result(timeout=FUND_MAPPING_TIMEOUT_SECONDS)
+        with _mapping_cache_lock:
+            _mapping_cache[fund_code] = (result, now)
         return result
     except FutureTimeoutError:
         logger.warning(
@@ -179,8 +201,6 @@ def get_fund_etf_mapping(fund_code: str) -> Optional[Tuple[str, str, str]]:
     except Exception as e:
         logger.warning(f"[基金映射] akshare查询失败: {e}")
         return None
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _query_fund_mapping_via_akshare(fund_code: str) -> Optional[Tuple[str, str, str]]:
@@ -297,14 +317,24 @@ def _parse_benchmark_weights(benchmark: str) -> List[Tuple[str, float]]:
     return results
 
 
-@lru_cache(maxsize=1)
+# 基金名称列表缓存
+_fund_name_cache: Optional[Dict[str, str]] = None
+_fund_name_cache_time: float = 0.0
+
+
 def _get_fund_name_list() -> Dict[str, str]:
-    """获取基金名称列表（缓存）"""
+    """获取基金名称列表（24h TTL 缓存）"""
+    global _fund_name_cache, _fund_name_cache_time
+    now = time.monotonic()
+    if _fund_name_cache is not None and now - _fund_name_cache_time < _CACHE_TTL_SECONDS:
+        return _fund_name_cache
     try:
         import akshare as ak
         df = ak.fund_name_em()
         if df is not None and not df.empty:
-            return dict(zip(df['基金代码'].astype(str), df['基金简称']))
+            _fund_name_cache = dict(zip(df['基金代码'].astype(str), df['基金简称']))
+            _fund_name_cache_time = now
+            return _fund_name_cache
     except Exception:
         pass
     return {}
