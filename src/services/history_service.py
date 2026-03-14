@@ -845,3 +845,137 @@ class HistoryService:
                 lines.append(f"| {label} | {formatted} |")
 
         lines.extend(["", "---", ""])
+
+    # ── Phase 3: 基金历史 adapter 方法 ──
+
+    def get_fund_history_list(
+        self,
+        fund_code: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        获取基金历史列表（分页）。
+
+        仅返回 asset_type='fund' 的记录，并用基金专用 schema 输出。
+        """
+        try:
+            start_dt = None
+            end_dt = None
+            if start_date:
+                try:
+                    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+                except ValueError:
+                    logger.warning(f"无效的 start_date 格式: {start_date}")
+            if end_date:
+                try:
+                    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+                except ValueError:
+                    logger.warning(f"无效的 end_date 格式: {end_date}")
+
+            offset = (page - 1) * limit
+            records, total = self.db.get_fund_history_paginated(
+                fund_code=fund_code,
+                start_date=start_dt,
+                end_date=end_dt,
+                offset=offset,
+                limit=limit,
+            )
+
+            items = [self._record_to_fund_list_item(r) for r in records]
+            return {
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "items": items,
+            }
+        except Exception as e:
+            logger.error(f"查询基金历史列表失败: {e}", exc_info=True)
+            return {"total": 0, "page": page, "limit": limit, "items": []}
+
+    def get_fund_history_detail_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """
+        获取基金历史详情。
+
+        仅返回 asset_type='fund' 的记录。
+        """
+        try:
+            record = self.db.get_analysis_history_by_id(record_id)
+            if not record:
+                return None
+            # 确保只返回基金记录
+            if getattr(record, 'asset_type', 'stock') != 'fund':
+                return None
+            return self._record_to_fund_detail_dict(record)
+        except Exception as e:
+            logger.error(f"查询基金历史详情失败: {e}", exc_info=True)
+            return None
+
+    @staticmethod
+    def _record_to_fund_list_item(record) -> Dict[str, Any]:
+        """将 AnalysisHistory ORM 记录转为基金列表项 dict。"""
+        # 从 raw_result JSON 解析 action 和 confidence_score
+        action = record.operation_advice
+        confidence_score = None
+        try:
+            raw = json.loads(record.raw_result) if record.raw_result else {}
+            advice_block = raw.get("advice", {})
+            if not action and isinstance(advice_block, dict):
+                action = advice_block.get("action")
+            if isinstance(advice_block, dict):
+                confidence_score = advice_block.get("confidence_score")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        return {
+            "id": record.id,
+            "query_id": record.query_id,
+            "fund_code": record.input_code or record.code,
+            "fund_name": record.input_name or record.name,
+            "analysis_code": record.code,
+            "analysis_name": record.name,
+            "analysis_mode": record.analysis_mode,
+            "report_type": record.report_type,
+            "action": action,
+            "confidence_score": confidence_score,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+        }
+
+    @staticmethod
+    def _record_to_fund_detail_dict(record) -> Dict[str, Any]:
+        """将 AnalysisHistory ORM 记录转为基金详情 dict。"""
+        raw = {}
+        try:
+            raw = json.loads(record.raw_result) if record.raw_result else {}
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        advice_block = raw.get("advice", {}) if isinstance(raw, dict) else {}
+
+        return {
+            "id": record.id,
+            "query_id": record.query_id,
+            "fund_code": record.input_code or record.code,
+            "fund_name": record.input_name or record.name,
+            "analysis_code": record.code,
+            "analysis_name": record.name,
+            "analysis_mode": record.analysis_mode,
+            "report_type": record.report_type,
+            "action": advice_block.get("action") or record.operation_advice,
+            "action_label": advice_block.get("action_label"),
+            "confidence_score": advice_block.get("confidence_score"),
+            "confidence_level": advice_block.get("confidence_level"),
+            "strategy": advice_block.get("strategy"),
+            "reasons": advice_block.get("reasons"),
+            "risk_factors": advice_block.get("risk_factors"),
+            "rule_assessment": advice_block.get("rule_assessment"),
+            "indicators": raw.get("indicators") if isinstance(raw, dict) else None,
+            "deep_analysis": raw.get("deep_analysis") if isinstance(raw, dict) else None,
+            "mapping_note": raw.get("mapping_note") if isinstance(raw, dict) else None,
+            "analysis_summary": record.analysis_summary,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "markdown_available": False,  # Phase 3 首版暂不支持基金 Markdown
+        }
+

@@ -1146,6 +1146,56 @@ class DatabaseManager:
             ).scalars().first()
             return result
 
+    def get_fund_history_paginated(
+        self,
+        fund_code: Optional[str] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Tuple[List[AnalysisHistory], int]:
+        """
+        分页查询基金历史记录（Phase 3）。
+
+        仅返回 asset_type='fund' 的记录。
+        用 input_code 筛选（用户输入的基金代码），而非 code（ETF 代码）。
+        """
+        from sqlalchemy import func
+
+        with self.get_session() as session:
+            conditions = [AnalysisHistory.asset_type == 'fund']
+
+            if fund_code:
+                conditions.append(AnalysisHistory.input_code == fund_code)
+            if start_date:
+                conditions.append(
+                    AnalysisHistory.created_at >= datetime.combine(
+                        start_date, datetime.min.time()
+                    )
+                )
+            if end_date:
+                conditions.append(
+                    AnalysisHistory.created_at < datetime.combine(
+                        end_date + timedelta(days=1), datetime.min.time()
+                    )
+                )
+
+            where_clause = and_(*conditions)
+
+            total = session.execute(
+                select(func.count(AnalysisHistory.id)).where(where_clause)
+            ).scalar() or 0
+
+            results = session.execute(
+                select(AnalysisHistory)
+                .where(where_clause)
+                .order_by(desc(AnalysisHistory.created_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+
+            return list(results), total
+
     def delete_analysis_history_records(self, record_ids: List[int]) -> int:
         """
         删除指定的分析历史记录。

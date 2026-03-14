@@ -143,3 +143,63 @@ class FundAdviceResponse(BaseModel):
     analysis_mode: str = Field(..., description="分析模式：fast/deep")
     deep_analysis: Optional[DeepAnalysisPayload] = Field(None, description="深度分析结果（深度模式下返回）")
     generated_at: str = Field(..., description="生成时间")
+
+
+# ── Phase 3: 基金历史读模型 schemas ──
+
+
+class FundHistoryItem(BaseModel):
+    """基金历史列表项"""
+
+    id: int = Field(..., description="记录主键")
+    query_id: Optional[str] = Field(None, description="查询链路 ID")
+    fund_code: str = Field(..., description="输入基金代码")
+    fund_name: Optional[str] = Field(None, description="输入基金名称")
+    analysis_code: str = Field(..., description="实际分析 ETF 代码")
+    analysis_name: Optional[str] = Field(None, description="实际分析 ETF 名称")
+    analysis_mode: Optional[str] = Field(None, description="分析模式: fast/deep")
+    report_type: Optional[str] = Field(None, description="报告格式: simple/full")
+    action: Optional[str] = Field(None, description="操作建议: buy/hold/wait/reduce")
+    confidence_score: Optional[int] = Field(None, description="置信度分数")
+    created_at: Optional[str] = Field(None, description="创建时间")
+
+
+class FundHistoryListResponse(BaseModel):
+    """基金历史列表分页响应"""
+
+    total: int = Field(..., description="符合条件的总记录数")
+    page: int = Field(..., description="当前页码")
+    limit: int = Field(..., description="每页条数")
+    items: List[FundHistoryItem] = Field(default_factory=list, description="记录列表")
+
+
+class FundHistoryDetailResponse(BaseModel):
+    """基金历史详情响应"""
+
+    id: int
+    query_id: Optional[str] = None
+    fund_code: str
+    fund_name: Optional[str] = None
+    analysis_code: str
+    analysis_name: Optional[str] = None
+    analysis_mode: Optional[str] = None
+    report_type: Optional[str] = None
+
+    action: Optional[str] = None
+    action_label: Optional[str] = None
+    confidence_score: Optional[int] = None
+    confidence_level: Optional[str] = None
+
+    strategy: Optional[dict] = None
+    reasons: Optional[List[str]] = None
+    risk_factors: Optional[List[str]] = None
+    rule_assessment: Optional[dict] = None
+
+    indicators: Optional[dict] = None
+    deep_analysis: Optional[dict] = None
+    mapping_note: Optional[str] = None
+    analysis_summary: Optional[str] = None
+
+    created_at: Optional[str] = None
+    markdown_available: bool = False
+
