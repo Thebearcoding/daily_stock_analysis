@@ -716,7 +716,12 @@ class AkshareFetcher(BaseFetcher):
         elif _is_hk_code(stock_code):
             return self._get_hk_realtime_quote(stock_code)
         elif _is_etf_code(stock_code):
-            return self._get_etf_realtime_quote(stock_code)
+            # ETF 优先用专用接口，失败则回退到腾讯接口
+            result = self._get_etf_realtime_quote(stock_code)
+            if result is None:
+                logger.info(f"[实时行情] ETF专用接口失败，回退到腾讯接口获取 {stock_code}")
+                result = self._get_stock_realtime_quote_tencent(stock_code)
+            return result
         else:
             # 普通 A 股：根据 source 选择数据源
             if source == "sina":

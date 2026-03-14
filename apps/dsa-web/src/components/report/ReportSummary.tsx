@@ -4,6 +4,7 @@ import { ReportOverview } from './ReportOverview';
 import { ReportStrategy } from './ReportStrategy';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
+import { Card } from '../common';
 
 interface ReportSummaryProps {
   data: AnalysisResult | AnalysisReport;
@@ -19,7 +20,19 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
   isHistory = false,
 }) => {
   // 兼容 AnalysisResult 和 AnalysisReport 两种数据格式
-  const report: AnalysisReport = 'report' in data ? data.report : data;
+  const report: AnalysisReport | null = 'report' in data ? data.report : data;
+
+  if (!report || !report.meta || !report.summary) {
+    return (
+      <Card variant="bordered" padding="md">
+        <div className="text-left">
+          <h3 className="text-sm font-medium text-warning">报告数据不完整</h3>
+          <p className="text-xs text-secondary mt-1">当前记录缺少必要字段，暂时无法渲染详情。</p>
+        </div>
+      </Card>
+    );
+  }
+
   const queryId = 'queryId' in data ? data.queryId : report.meta.queryId;
 
   const { meta, summary, strategy, details } = report;

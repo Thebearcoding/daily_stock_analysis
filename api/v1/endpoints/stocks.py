@@ -69,6 +69,9 @@ def get_stock_quote(stock_code: str) -> StockQuote:
         
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
+            analysis_code=result.get("analysis_code"),
+            mapped_from=result.get("mapped_from"),
+            mapping_note=result.get("mapping_note"),
             stock_name=result.get("stock_name"),
             current_price=result.get("current_price", 0.0),
             change=result.get("change"),
@@ -79,6 +82,16 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             prev_close=result.get("prev_close"),
             volume=result.get("volume"),
             amount=result.get("amount"),
+            volume_ratio=result.get("volume_ratio"),
+            turnover_rate=result.get("turnover_rate"),
+            pe_ratio=result.get("pe_ratio"),
+            pb_ratio=result.get("pb_ratio"),
+            total_mv=result.get("total_mv"),
+            circ_mv=result.get("circ_mv"),
+            ma5=result.get("ma5"),
+            ma10=result.get("ma10"),
+            ma20=result.get("ma20"),
+            data_source=result.get("data_source"),
             update_time=result.get("update_time")
         )
         
@@ -144,15 +157,23 @@ def get_stock_history(
                 close=item.get("close"),
                 volume=item.get("volume"),
                 amount=item.get("amount"),
-                change_percent=item.get("change_percent")
+                change_percent=item.get("change_percent"),
+                ma5=item.get("ma5"),
+                ma10=item.get("ma10"),
+                ma20=item.get("ma20"),
+                volume_ratio=item.get("volume_ratio"),
             )
             for item in result.get("data", [])
         ]
         
         return StockHistoryResponse(
-            stock_code=stock_code,
+            stock_code=result.get("stock_code", stock_code),
+            analysis_code=result.get("analysis_code"),
+            mapped_from=result.get("mapped_from"),
+            mapping_note=result.get("mapping_note"),
             stock_name=result.get("stock_name"),
-            period=period,
+            period=result.get("period", period),
+            data_source=result.get("data_source"),
             data=data
         )
     

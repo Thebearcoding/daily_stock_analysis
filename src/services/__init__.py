@@ -11,9 +11,11 @@
 from src.services.analysis_service import AnalysisService
 from src.services.history_service import HistoryService
 from src.services.stock_service import StockService
+from src.services.fund_advice_service import FundAdviceService
 
 __all__ = [
     "AnalysisService",
     "HistoryService",
     "StockService",
+    "FundAdviceService",
 ]

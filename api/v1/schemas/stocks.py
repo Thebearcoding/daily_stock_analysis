@@ -18,6 +18,9 @@ class StockQuote(BaseModel):
     """股票实时行情"""
     
     stock_code: str = Field(..., description="股票代码")
+    analysis_code: Optional[str] = Field(None, description="实际分析代码（基金映射后）")
+    mapped_from: Optional[str] = Field(None, description="映射前原始代码")
+    mapping_note: Optional[str] = Field(None, description="映射说明")
     stock_name: Optional[str] = Field(None, description="股票名称")
     current_price: float = Field(..., description="当前价格")
     change: Optional[float] = Field(None, description="涨跌额")
@@ -28,6 +31,16 @@ class StockQuote(BaseModel):
     prev_close: Optional[float] = Field(None, description="昨收价")
     volume: Optional[float] = Field(None, description="成交量（股）")
     amount: Optional[float] = Field(None, description="成交额（元）")
+    volume_ratio: Optional[float] = Field(None, description="量比")
+    turnover_rate: Optional[float] = Field(None, description="换手率 (%)")
+    pe_ratio: Optional[float] = Field(None, description="市盈率")
+    pb_ratio: Optional[float] = Field(None, description="市净率")
+    total_mv: Optional[float] = Field(None, description="总市值")
+    circ_mv: Optional[float] = Field(None, description="流通市值")
+    ma5: Optional[float] = Field(None, description="MA5")
+    ma10: Optional[float] = Field(None, description="MA10")
+    ma20: Optional[float] = Field(None, description="MA20")
+    data_source: Optional[str] = Field(None, description="数据来源")
     update_time: Optional[str] = Field(None, description="更新时间")
     
     class Config:
@@ -60,6 +73,10 @@ class KLineData(BaseModel):
     volume: Optional[float] = Field(None, description="成交量")
     amount: Optional[float] = Field(None, description="成交额")
     change_percent: Optional[float] = Field(None, description="涨跌幅 (%)")
+    ma5: Optional[float] = Field(None, description="MA5")
+    ma10: Optional[float] = Field(None, description="MA10")
+    ma20: Optional[float] = Field(None, description="MA20")
+    volume_ratio: Optional[float] = Field(None, description="量比")
     
     class Config:
         json_schema_extra = {
@@ -80,8 +97,12 @@ class StockHistoryResponse(BaseModel):
     """股票历史行情响应"""
     
     stock_code: str = Field(..., description="股票代码")
+    analysis_code: Optional[str] = Field(None, description="实际分析代码（基金映射后）")
+    mapped_from: Optional[str] = Field(None, description="映射前原始代码")
+    mapping_note: Optional[str] = Field(None, description="映射说明")
     stock_name: Optional[str] = Field(None, description="股票名称")
     period: str = Field(..., description="K 线周期")
+    data_source: Optional[str] = Field(None, description="数据来源")
     data: List[KLineData] = Field(default_factory=list, description="K 线数据列表")
     
     class Config:

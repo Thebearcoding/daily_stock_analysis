@@ -26,6 +26,7 @@ from src.notification import NotificationService, NotificationChannel
 from src.search_service import SearchService
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
+from src.services.fund_mapping import resolve_code
 from bot.models import BotMessage
 
 
@@ -120,23 +121,31 @@ class StockAnalysisPipeline:
             Tuple[是否成功, 错误信息]
         """
         try:
+            # 基金代码在抓取阶段先映射为对应 ETF，避免“分析用ETF但库里只有原基金代码数据”导致策略数据缺失
+            fetch_code = code
+            analysis_code, _, mapping_note = resolve_code(code)
+            if analysis_code != code:
+                fetch_code = analysis_code
+            if mapping_note:
+                logger.info(f"[基金映射] {mapping_note}（用于行情抓取）")
+
             today = date.today()
             
             # 断点续传检查：如果今日数据已存在，跳过
-            if not force_refresh and self.db.has_today_data(code, today):
-                logger.info(f"[{code}] 今日数据已存在，跳过获取（断点续传）")
+            if not force_refresh and self.db.has_today_data(fetch_code, today):
+                logger.info(f"[{fetch_code}] 今日数据已存在，跳过获取（断点续传）")
                 return True, None
             
             # 从数据源获取数据
-            logger.info(f"[{code}] 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            logger.info(f"[{fetch_code}] 开始从数据源获取数据...")
+            df, source_name = self.fetcher_manager.get_daily_data(fetch_code, days=30)
             
             if df is None or df.empty:
                 return False, "获取数据为空"
             
             # 保存到数据库
-            saved_count = self.db.save_daily_data(df, code, source_name)
-            logger.info(f"[{code}] 数据保存成功（来源: {source_name}，新增 {saved_count} 条）")
+            saved_count = self.db.save_daily_data(df, fetch_code, source_name)
+            logger.info(f"[{fetch_code}] 数据保存成功（来源: {source_name}，新增 {saved_count} 条）")
             
             return True, None
             
@@ -165,6 +174,14 @@ class StockAnalysisPipeline:
             AnalysisResult 或 None（如果分析失败）
         """
         try:
+            # Step 0: 基金代码自动映射 - 场外基金自动转换为对应ETF
+            original_fund_name = None
+            mapping_note = None
+            analysis_code, original_fund_name, mapping_note = resolve_code(code)
+            if mapping_note:
+                logger.info(f"[基金映射] {mapping_note}")
+                code = analysis_code  # 后续用ETF代码分析
+
             # 获取股票名称（优先从实时行情获取真实名称）
             stock_name = STOCK_NAME_MAP.get(code, '')
             
@@ -311,8 +328,12 @@ class StockAnalysisPipeline:
                 except Exception as e:
                     logger.warning(f"[{code}] 保存分析历史失败: {e}")
 
+            # 如果是基金映射的分析，在结果中附加原始基金信息
+            if original_fund_name and result:
+                result.name = f"{original_fund_name}（对应ETF: {result.name}）"
+
             return result
-            
+
         except Exception as e:
             logger.error(f"[{code}] 分析失败: {e}")
             logger.exception(f"[{code}] 详细错误信息:")

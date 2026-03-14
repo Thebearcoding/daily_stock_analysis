@@ -36,6 +36,18 @@ from api.v1.schemas.stocks import (
     StockHistoryResponse,
     KLineData,
 )
+from api.v1.schemas.funds import (
+    PriceZone,
+    FundStrategy,
+    RuleAssessment,
+    MACDSnapshot,
+    RSISnapshot,
+    DeepAnalysisSummary,
+    DeepAnalysisStrategy,
+    DeepAnalysisDetails,
+    DeepAnalysisPayload,
+    FundAdviceResponse,
+)
 
 __all__ = [
     # common
@@ -62,4 +74,15 @@ __all__ = [
     "StockQuote",
     "StockHistoryResponse",
     "KLineData",
+    # funds
+    "PriceZone",
+    "FundStrategy",
+    "RuleAssessment",
+    "MACDSnapshot",
+    "RSISnapshot",
+    "DeepAnalysisSummary",
+    "DeepAnalysisStrategy",
+    "DeepAnalysisDetails",
+    "DeepAnalysisPayload",
+    "FundAdviceResponse",
 ]
