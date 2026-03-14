@@ -1,7 +1,9 @@
 export * from './Button';
 export * from './Card';
+export * from './EyeToggleIcon';
 export * from './Loading';
 export * from './Drawer';
+export * from './ApiErrorAlert';
 export * from './Collapsible';
 export * from './ScoreGauge';
 export * from './JsonViewer';
@@ -9,3 +11,4 @@ export * from './Select';
 export * from './Badge';
 export * from './Pagination';
 export * from './AppErrorBoundary';
+export * from './ConfirmDialog';

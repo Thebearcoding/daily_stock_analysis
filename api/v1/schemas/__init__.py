@@ -23,6 +23,8 @@ from api.v1.schemas.analysis import (
 from api.v1.schemas.history import (
     HistoryItem,
     HistoryListResponse,
+    DeleteHistoryRequest,
+    DeleteHistoryResponse,
     NewsIntelItem,
     NewsIntelResponse,
     AnalysisReport,
@@ -48,6 +50,30 @@ from api.v1.schemas.funds import (
     DeepAnalysisPayload,
     FundAdviceResponse,
 )
+from api.v1.schemas.backtest import (
+    BacktestRunRequest,
+    BacktestRunResponse,
+    BacktestResultItem,
+    BacktestResultsResponse,
+    PerformanceMetrics,
+)
+from api.v1.schemas.system_config import (
+    SystemConfigFieldSchema,
+    SystemConfigCategorySchema,
+    SystemConfigSchemaResponse,
+    SystemConfigItem,
+    SystemConfigResponse,
+    SystemConfigUpdateItem,
+    UpdateSystemConfigRequest,
+    UpdateSystemConfigResponse,
+    ValidateSystemConfigRequest,
+    ConfigValidationIssue,
+    ValidateSystemConfigResponse,
+    TestLLMChannelRequest,
+    TestLLMChannelResponse,
+    SystemConfigValidationErrorResponse,
+    SystemConfigConflictResponse,
+)
 
 __all__ = [
     # common
@@ -63,6 +89,8 @@ __all__ = [
     # history
     "HistoryItem",
     "HistoryListResponse",
+    "DeleteHistoryRequest",
+    "DeleteHistoryResponse",
     "NewsIntelItem",
     "NewsIntelResponse",
     "AnalysisReport",
@@ -85,4 +113,26 @@ __all__ = [
     "DeepAnalysisDetails",
     "DeepAnalysisPayload",
     "FundAdviceResponse",
+    # backtest
+    "BacktestRunRequest",
+    "BacktestRunResponse",
+    "BacktestResultItem",
+    "BacktestResultsResponse",
+    "PerformanceMetrics",
+    # system config
+    "SystemConfigFieldSchema",
+    "SystemConfigCategorySchema",
+    "SystemConfigSchemaResponse",
+    "SystemConfigItem",
+    "SystemConfigResponse",
+    "SystemConfigUpdateItem",
+    "UpdateSystemConfigRequest",
+    "UpdateSystemConfigResponse",
+    "ValidateSystemConfigRequest",
+    "ConfigValidationIssue",
+    "ValidateSystemConfigResponse",
+    "TestLLMChannelRequest",
+    "TestLLMChannelResponse",
+    "SystemConfigValidationErrorResponse",
+    "SystemConfigConflictResponse",
 ]

@@ -16,6 +16,7 @@ export interface AnalysisRequest {
 
 /** 报告元信息 */
 export interface ReportMeta {
+  id?: number;  // 分析历史记录主键 ID（历史报告时有此字段）
   queryId: string;
   stockCode: string;
   stockName: string;
@@ -23,6 +24,7 @@ export interface ReportMeta {
   createdAt: string;
   currentPrice?: number;
   changePct?: number;
+  modelUsed?: string;  // 分析使用的 LLM 模型（Issue #528）
 }
 
 /** 情绪标签 */
@@ -122,8 +124,8 @@ export interface DuplicateTaskError {
 
 /** 历史记录摘要（列表展示用） */
 export interface HistoryItem {
-  id: string;
-  queryId: string;
+  id: number;  // Record primary key ID, always present for persisted history items
+  queryId: string;  // 分析记录关联 query_id（批量分析时重复）
   stockCode: string;
   stockName?: string;
   reportType?: string;
