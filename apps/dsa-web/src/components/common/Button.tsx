@@ -37,44 +37,44 @@ export const Button: React.FC<ButtonProps> = ({
 
   const variantStyles = {
     primary: `
-      bg-cyan-600 text-white
-      hover:bg-cyan-500
-      focus:ring-cyan-500
-      shadow-lg shadow-cyan-500/25
+      bg-charcoal text-white
+      hover:bg-[#333333]
+      focus:ring-charcoal/50
+      shadow-md shadow-charcoal/10
     `,
     secondary: `
-      bg-slate-700 text-gray-200
-      hover:bg-slate-600
-      focus:ring-slate-500
-      border border-slate-600
+      bg-warm-surface text-charcoal
+      hover:bg-warm-surface-alt
+      focus:ring-warm-border
+      border border-warm-border
     `,
     outline: `
-      bg-transparent text-cyan-400
-      border border-cyan-500/30
-      hover:bg-cyan-500/10 hover:border-cyan-500/50
-      focus:ring-cyan-500
+      bg-transparent text-charcoal
+      border border-warm-border
+      hover:bg-warm-surface-alt hover:border-charcoal/30
+      focus:ring-charcoal/30
     `,
     ghost: `
-      bg-transparent text-gray-300
-      hover:bg-white/5 hover:text-white
-      focus:ring-gray-500
+      bg-transparent text-charcoal-muted
+      hover:bg-warm-surface-alt hover:text-charcoal
+      focus:ring-warm-border
     `,
     gradient: `
-      bg-gradient-to-r from-cyan-500 to-blue-500 text-white
-      hover:from-cyan-400 hover:to-blue-400
-      focus:ring-cyan-500
-      shadow-lg shadow-cyan-500/25
+      bg-gradient-to-r from-charcoal to-[#333333] text-white
+      hover:from-[#333333] hover:to-[#111111]
+      focus:ring-charcoal/50
+      shadow-md shadow-charcoal/10
     `,
     danger: `
-      bg-red-600 text-white
-      hover:bg-red-500
-      focus:ring-red-500
-      shadow-lg shadow-red-500/25
+      bg-red-50 text-red-600
+      hover:bg-red-100
+      focus:ring-red-500/50
+      border border-red-200
     `,
   };
 
   const glowStyles = glow
-    ? 'shadow-glow-cyan hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]'
+    ? 'shadow-sm hover:shadow-md transition-shadow'
     : '';
 
   return (

@@ -40,11 +40,11 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         <button
           type="button"
           onClick={() => copyToClipboard(jsonStr)}
-          className="absolute top-2 right-2 text-xs text-muted hover:text-cyan transition-colors"
+          className="absolute top-2 right-2 text-xs text-charcoal-muted hover:text-clay transition-colors"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
-        <pre className="text-xs text-secondary font-mono overflow-x-auto p-3 bg-base rounded-lg max-h-80 overflow-y-auto text-left w-0 min-w-full">
+        <pre className="text-xs text-charcoal-muted font-mono overflow-x-auto p-3 bg-warm-bg rounded-lg max-h-80 overflow-y-auto text-left w-0 min-w-full">
           {jsonStr}
         </pre>
       </div>
@@ -55,14 +55,14 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
     <Card variant="bordered" padding="md" className="text-left">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">TRANSPARENCY</span>
-        <h3 className="text-base font-semibold text-white mt-0.5">数据追溯</h3>
+        <h3 className="text-base font-semibold text-charcoal mt-0.5">数据追溯</h3>
       </div>
 
       {/* Record ID */}
       {recordId && (
-        <div className="flex items-center gap-2 text-xs text-muted mb-3 pb-3 border-b border-white/5">
+        <div className="flex items-center gap-2 text-xs text-charcoal-muted mb-3 pb-3 border-b border-warm-border/50">
           <span>Record ID:</span>
-          <code className="font-mono text-xs text-cyan bg-cyan/10 px-1.5 py-0.5 rounded">
+          <code className="font-mono text-xs text-clay bg-clay/10 px-1.5 py-0.5 rounded">
             {recordId}
           </code>
         </div>
@@ -76,11 +76,11 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowRaw(!showRaw)}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg bg-elevated hover:bg-hover transition-colors"
+              className="w-full flex items-center justify-between p-2.5 rounded-lg bg-warm-surface-alt hover:bg-warm-bg transition-colors"
             >
-              <span className="text-xs text-white">原始分析结果</span>
+              <span className="text-xs text-charcoal">原始分析结果</span>
               <svg
-                className={`w-3.5 h-3.5 text-muted transition-transform ${showRaw ? 'rotate-180' : ''}`}
+                className={`w-3.5 h-3.5 text-charcoal-muted transition-transform ${showRaw ? 'rotate-180' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -102,11 +102,11 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowSnapshot(!showSnapshot)}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg bg-elevated hover:bg-hover transition-colors"
+              className="w-full flex items-center justify-between p-2.5 rounded-lg bg-warm-surface-alt hover:bg-warm-bg transition-colors"
             >
-              <span className="text-xs text-white">分析快照</span>
+              <span className="text-xs text-charcoal">分析快照</span>
               <svg
-                className={`w-3.5 h-3.5 text-muted transition-transform ${showSnapshot ? 'rotate-180' : ''}`}
+                className={`w-3.5 h-3.5 text-charcoal-muted transition-transform ${showSnapshot ? 'rotate-180' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

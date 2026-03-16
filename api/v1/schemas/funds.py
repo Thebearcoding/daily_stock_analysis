@@ -140,6 +140,7 @@ class FundAdviceResponse(BaseModel):
 
     reasons: List[str] = Field(default_factory=list, description="正向依据")
     risk_factors: List[str] = Field(default_factory=list, description="风险提示")
+    analysis_context: Optional[dict] = Field(None, description="分析上下文（如持仓摘要）")
     analysis_mode: str = Field(..., description="分析模式：fast/deep")
     deep_analysis: Optional[DeepAnalysisPayload] = Field(None, description="深度分析结果（深度模式下返回）")
     generated_at: str = Field(..., description="生成时间")
@@ -196,6 +197,7 @@ class FundHistoryDetailResponse(BaseModel):
     rule_assessment: Optional[dict] = None
 
     indicators: Optional[dict] = None
+    analysis_context: Optional[dict] = None
     deep_analysis: Optional[dict] = None
     mapping_note: Optional[str] = None
     analysis_summary: Optional[str] = None
@@ -203,3 +205,80 @@ class FundHistoryDetailResponse(BaseModel):
     created_at: Optional[str] = None
     markdown_available: bool = False
 
+
+# ── Phase 3B: 基金持仓快照 schemas ──
+
+
+class FundHoldingItem(BaseModel):
+    """单条持仓明细"""
+
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    weight: Optional[float] = Field(None, description="占净值比例 (%)")
+    rank: Optional[int] = Field(None, description="排名")
+
+
+class FundHoldingsResponse(BaseModel):
+    """基金持仓响应"""
+
+    fund_code: str = Field(..., description="基金代码")
+    fund_name: Optional[str] = Field(None, description="基金名称")
+    analysis_code: str = Field(..., description="实际分析代码")
+    analysis_name: Optional[str] = Field(None, description="实际分析标的名称")
+    source_type: str = Field(..., description="数据来源: fund_disclosed_holdings / unavailable")
+    completeness: str = Field(..., description="数据完整性: low / unavailable")
+    as_of_date: Optional[str] = Field(None, description="数据截止日期")
+    is_realtime: bool = Field(False, description="是否实时数据（始终为 False）")
+    items: List[FundHoldingItem] = Field(default_factory=list, description="持仓明细")
+
+
+# ── Phase 4: 基金异步任务 schemas ──
+
+
+class FundTaskAccepted(BaseModel):
+    """异步任务已接受（202 响应）"""
+
+    task_id: str = Field(..., description="任务 ID")
+    status: str = Field("pending", description="任务状态")
+    message: str = Field(..., description="提示信息")
+
+
+class FundTaskInfo(BaseModel):
+    """基金任务信息（列表用）"""
+
+    task_id: str
+    fund_code: str = Field(..., description="基金代码")
+    fund_name: Optional[str] = None
+    asset_type: str = Field("fund", description="资产类型")
+    analysis_mode: Optional[str] = None
+    status: str
+    progress: int = 0
+    message: Optional[str] = None
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class FundTaskStatus(BaseModel):
+    """基金任务状态（含完成态 fund-shaped result）"""
+
+    task_id: str
+    status: str
+    progress: int = 0
+    fund_code: Optional[str] = None
+    analysis_code: Optional[str] = None
+    analysis_mode: Optional[str] = None
+    record_id: Optional[int] = None
+    result: Optional[dict] = Field(None, description="基金分析结果（fund-shaped advice）")
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class FundTaskListResponse(BaseModel):
+    """基金任务列表响应"""
+
+    total: int = 0
+    pending: int = 0
+    processing: int = 0
+    tasks: List[FundTaskInfo] = Field(default_factory=list)

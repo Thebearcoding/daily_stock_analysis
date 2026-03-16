@@ -17,12 +17,12 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
   value,
   color,
 }) => (
-  <div className="relative overflow-hidden rounded-lg bg-elevated border border-white/5 p-3 hover:border-white/10 transition-colors">
+  <div className="relative overflow-hidden rounded-lg bg-warm-surface-alt border border-warm-border/50 p-3 hover:border-warm-border transition-colors">
     <div className="flex flex-col">
-      <span className="text-xs text-muted mb-0.5">{label}</span>
+      <span className="text-xs text-charcoal-muted mb-0.5">{label}</span>
       <span
         className="text-lg font-bold font-mono"
-        style={{ color: value ? color : 'var(--text-muted)' }}
+        style={{ color: value ? color : '#999' }}
       >
         {value || '—'}
       </span>
@@ -70,7 +70,7 @@ export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy }) => {
     <Card variant="bordered" padding="md">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">STRATEGY POINTS</span>
-        <h3 className="text-base font-semibold text-white">狙击点位</h3>
+        <h3 className="text-base font-semibold text-charcoal">狙击点位</h3>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {strategyItems.map((item) => (

@@ -1,21 +1,18 @@
-import type React from 'react';
-import { useMemo, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fundsApi } from '../api/funds';
 import type { FundAdviceMode } from '../api/funds';
-import type { FundAdviceResponse } from '../types/funds';
+import type {
+  FundAdviceResponse,
+  FundTaskInfo,
+  FundHistoryDetailResponse,
+  FundHistoryItem,
+} from '../types/funds';
 
-const ACTION_STYLE: Record<string, string> = {
-  buy: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  hold: 'bg-sky-100 text-sky-700 border-sky-200',
-  wait: 'bg-amber-100 text-amber-700 border-amber-200',
-  reduce: 'bg-rose-100 text-rose-700 border-rose-200',
-};
-
-const CONFIDENCE_STYLE: Record<string, string> = {
-  高: 'text-emerald-700',
-  中: 'text-amber-700',
-  低: 'text-rose-700',
-};
+import { Toolbar } from '../components/FundAnalysis/Toolbar';
+import { HeroSummary } from '../components/FundAnalysis/HeroSummary';
+import { AsyncTaskIndicator } from '../components/FundAnalysis/AsyncTaskIndicator';
+import { HistoryList } from '../components/FundAnalysis/HistoryList';
+import { DetailDrawer } from '../components/FundAnalysis/DetailDrawer';
 
 const validateFundCode = (value: string): { valid: boolean; message?: string; normalized: string } => {
   const normalized = value.trim();
@@ -23,15 +20,67 @@ const validateFundCode = (value: string): { valid: boolean; message?: string; no
     return { valid: false, message: '请输入基金代码', normalized };
   }
   if (!/^\d{6}$/.test(normalized)) {
-    return { valid: false, message: '基金代码需为 6 位数字', normalized };
+    return { valid: false, message: '基金代码应为 6 位数字', normalized };
   }
   return { valid: true, normalized };
 };
 
-const fmt = (value: unknown, digits = 4): string => {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '--';
-  return num.toFixed(digits);
+const EMPTY_MACD = { dif: 0, dea: 0, bar: 0, status: '--', signal: '--' };
+const EMPTY_RSI = { rsi6: 0, rsi12: 0, rsi24: 0, status: '--', signal: '--' };
+const EMPTY_RULE = {
+  entryRule: '暂无入场规则',
+  exitRule: '暂无离场规则',
+  entryReady: false,
+  exitTriggered: false,
+  comment: '暂无规则说明',
+};
+const EMPTY_STRATEGY = {
+  buyZone: { low: 0, high: 0, description: '--' },
+  addZone: { low: 0, high: 0, description: '--' },
+  stopLoss: 0,
+  takeProfit: 0,
+  positionAdvice: '--',
+};
+
+const mapHistoryDetailToAdvice = (detail: FundHistoryDetailResponse): FundAdviceResponse => {
+  const indicators = detail.indicators ?? {};
+
+  return {
+    fundCode: detail.fundCode,
+    analysisCode: detail.analysisCode,
+    mappedFrom: null,
+    mappingNote: detail.mappingNote ?? null,
+    fundName: detail.fundName ?? detail.analysisName ?? detail.fundCode,
+    latestDate: detail.createdAt ? detail.createdAt.slice(0, 10) : '--',
+    dataSource: null,
+    action: detail.action ?? 'hold',
+    actionLabel: detail.actionLabel ?? detail.action ?? '持有',
+    confidenceLevel: detail.confidenceLevel ?? '中',
+    confidenceScore: detail.confidenceScore ?? 0,
+    trendStatus:
+      indicators.trendStatus ??
+      detail.deepAnalysis?.summary?.trendPrediction ??
+      detail.analysisSummary ??
+      '暂无趋势判断',
+    buySignal: indicators.buySignal ?? '--',
+    signalScore: indicators.signalScore ?? 0,
+    currentPrice: indicators.currentPrice ?? 0,
+    ma5: indicators.ma5 ?? 0,
+    ma10: indicators.ma10 ?? 0,
+    ma20: indicators.ma20 ?? 0,
+    ma60: indicators.ma60 ?? 0,
+    volumeStatus: indicators.volumeStatus ?? '--',
+    volumeRatio5d: indicators.volumeRatio5d ?? 0,
+    macd: indicators.macd ?? EMPTY_MACD,
+    rsi: indicators.rsi ?? EMPTY_RSI,
+    ruleAssessment: detail.ruleAssessment ?? EMPTY_RULE,
+    strategy: detail.strategy ?? EMPTY_STRATEGY,
+    reasons: detail.reasons ?? [],
+    riskFactors: detail.riskFactors ?? [],
+    analysisMode: detail.analysisMode ?? 'fast',
+    deepAnalysis: detail.deepAnalysis ?? null,
+    generatedAt: detail.createdAt ?? '',
+  };
 };
 
 const FundAdvicePage: React.FC = () => {
@@ -40,345 +89,248 @@ const FundAdvicePage: React.FC = () => {
   const [mode, setMode] = useState<FundAdviceMode>('fast');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Current analysis view
   const [result, setResult] = useState<FundAdviceResponse | null>(null);
+  
+  // Tasks state
+  const [tasks, setTasks] = useState<FundTaskInfo[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  
+  // History state
+  const [historyItems, setHistoryItems] = useState<FundHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerResult, setDrawerResult] = useState<FundAdviceResponse | null>(null);
 
-  const actionClassName = useMemo(() => {
-    if (!result) return '';
-    return ACTION_STYLE[result.action] ?? 'bg-slate-100 text-slate-700 border-slate-200';
-  }, [result]);
+  const pollIntervalRef = useRef<number | null>(null);
 
-  const confidenceClassName = useMemo(() => {
-    if (!result) return 'text-slate-500';
-    return CONFIDENCE_STYLE[result.confidenceLevel] ?? 'text-slate-500';
-  }, [result]);
-  const reasonItems = result && Array.isArray(result.reasons) ? result.reasons : [];
-  const riskItems = result && Array.isArray(result.riskFactors) ? result.riskFactors : [];
+  const fetchTasks = async (silent = true) => {
+    if (!silent) setTasksLoading(true);
+    try {
+      const res = await fundsApi.getTaskList(10);
+      setTasks(res.tasks || []);
+      
+      // If no processing tasks, we can stop polling
+      const hasProcessing = (res.tasks || []).some(t => t.status === 'processing');
+      if (!hasProcessing && pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        // Refresh history since a task might have finished
+        fetchHistory(true);
+      } else if (hasProcessing && pollIntervalRef.current === null) {
+        // Start polling if not already started
+        startPolling();
+      }
+    } catch (err) {
+      console.warn('Failed to fetch tasks', err);
+    } finally {
+      if (!silent) setTasksLoading(false);
+    }
+  };
 
-  const fetchAdvice = async (): Promise<void> => {
+  const fetchHistory = async (silent = true) => {
+    if (!silent) setHistoryLoading(true);
+    try {
+      const res = await fundsApi.getHistoryList({ limit: 12 });
+      setHistoryItems(res.items || []);
+    } catch (err) {
+      console.warn('Failed to fetch history', err);
+    } finally {
+      if (!silent) setHistoryLoading(false);
+    }
+  };
+
+  const startPolling = () => {
+    if (pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+    }
+    pollIntervalRef.current = window.setInterval(() => {
+      fetchTasks(true);
+    }, 5000);
+  };
+
+  useEffect(() => {
+    fetchTasks(false);
+    fetchHistory(false);
+    return () => {
+      if (pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAnalyze = async () => {
     const validation = validateFundCode(fundCode);
     if (!validation.valid) {
-      setError(validation.message || '基金代码格式错误');
+      setError(validation.message || '基金代码无效');
       return;
     }
 
     setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
-      const data = await fundsApi.getAdvice(validation.normalized, days, mode);
-      setResult(data);
+      if (mode === 'fast') {
+        const data = await fundsApi.getAdvice(validation.normalized, days, mode);
+        setResult(data);
+        fetchHistory(true);
+      } else {
+        await fundsApi.analyze(validation.normalized, days, mode, true);
+        fetchTasks(true);
+        startPolling();
+        setFundCode('');
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : '获取基金建议失败';
+      const message = err instanceof Error ? err.message : '分析失败';
       setError(message);
-      setResult(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === 'Enter' && !loading) {
-      void fetchAdvice();
+  const handleClear = () => {
+    setFundCode('');
+    setError(null);
+    setResult(null);
+  };
+
+  const handleExample = (code: string) => {
+    setFundCode(code);
+    setError(null);
+  };
+
+  const handleHistorySelect = async (item: FundHistoryItem) => {
+    setDrawerOpen(true);
+    setDrawerLoading(true);
+    setDrawerResult(null);
+    try {
+      const data = await fundsApi.getHistoryDetail(item.id);
+      if (data) {
+        setDrawerResult(mapHistoryDetailToAdvice(data));
+      }
+    } catch (err) {
+      console.warn('获取基金历史详情失败', err);
+    } finally {
+      setDrawerLoading(false);
     }
   };
 
   return (
-    <div className="px-4 py-4 md:px-6 md:py-5 space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="flex flex-col gap-3">
-          <div>
-            <h1 className="text-lg md:text-xl font-semibold text-slate-900">基金策略建议</h1>
-            <p className="text-sm text-slate-600 mt-1">
-              支持场外基金自动映射 ETF，结合均线、MACD、RSI 和规则判定输出可执行建议。
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[220px]">
-              <input
-                type="text"
-                value={fundCode}
-                onChange={(e) => {
-                  setFundCode(e.target.value);
-                  setError(null);
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="输入基金代码，如 024195"
-                className="input-terminal w-full"
-                disabled={loading}
-              />
-              {error && (
-                <p className="absolute -bottom-5 left-0 text-xs text-danger">{error}</p>
-              )}
-            </div>
-
-            <select
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="input-terminal w-32"
-              disabled={loading}
-            >
-              <option value={90}>90 天</option>
-              <option value={120}>120 天</option>
-              <option value={180}>180 天</option>
-              <option value={240}>240 天</option>
-            </select>
-
-            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1">
-              <button
-                type="button"
-                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                  mode === 'fast' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                onClick={() => setMode('fast')}
-                disabled={loading}
-              >
-                快速
-              </button>
-              <button
-                type="button"
-                className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                  mode === 'deep' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                onClick={() => setMode('deep')}
-                disabled={loading}
-              >
-                深度
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void fetchAdvice()}
-              disabled={loading}
-              className="btn-primary whitespace-nowrap"
-            >
-              {loading ? '计算中' : '提交分析'}
-            </button>
-          </div>
-          <p className="text-xs text-slate-500">
-            当前模式：{mode === 'deep' ? '深度（含新闻与大模型，耗时更长）' : '快速（技术面规则，秒级返回）'}
+    <div className="min-h-screen bg-warm-bg text-charcoal font-sans selection:bg-clay/20 selection:text-charcoal flex flex-col pt-6 md:pt-10">
+      
+      {/* Header & Toolbar Area */}
+      <div className="max-w-[1400px] w-full mx-auto px-4 md:px-8 mb-6 shrink-0">
+        <header className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-serif text-charcoal mb-2 tracking-tight">基金分析工作台</h1>
+          <p className="text-sm text-charcoal-muted max-w-xl">
+            用更温和、清晰的方式查看基金分析结果、异步任务进度与历史归档。
           </p>
-        </div>
-      </section>
+        </header>
 
-      {!result && !loading && (
-        <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-10 text-center">
-          <h2 className="text-base font-semibold text-slate-900">先输入基金代码</h2>
-          <p className="text-sm text-slate-600 mt-2">
-            推荐先试 `024195`、`017811`、`012414` 看看策略输出效果。
-          </p>
-        </section>
-      )}
+        <Toolbar
+          fundCode={fundCode}
+          setFundCode={setFundCode}
+          days={days}
+          setDays={setDays}
+          mode={mode}
+          setMode={setMode}
+          loading={loading}
+          onAnalyze={handleAnalyze}
+          onClear={handleClear}
+          onExample={handleExample}
+        />
 
-      {loading && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-10">
-          <div className="flex items-center justify-center gap-2 text-slate-600">
-            <div className="w-4 h-4 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
-            {mode === 'deep' ? '正在执行深度基金分析...' : '正在计算基金建议...'}
+        {error && (
+          <div className="mt-4 bg-red-50/80 border border-red-200 text-red-700 px-5 py-3 rounded-xl text-sm animate-fade-in shadow-sm flex items-start gap-3">
+            <svg className="w-5 h-5 shrink-0 mt-0.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="font-medium">分析失败</p>
+              <p className="opacity-90 mt-0.5">{error}</p>
+            </div>
           </div>
-        </section>
-      )}
+        )}
+      </div>
 
-      {result && !loading && (
-        <div className="space-y-4 animate-fade-in">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">{result.fundName || result.fundCode}</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  输入: {result.fundCode} | 分析: {result.analysisCode}
-                </p>
-                {result.mappingNote && (
-                  <p className="text-xs text-sky-700 mt-1">{result.mappingNote}</p>
-                )}
+      {/* Main Workspace Area */}
+      <div className="max-w-[1400px] w-full mx-auto px-4 md:px-8 flex flex-col lg:flex-row gap-6 lg:gap-8 pb-12 flex-1 min-h-0">
+        
+        {/* Left Column (Main Content) - Approx 2/3 width */}
+        <div className="flex-1 min-w-0 flex flex-col gap-6">
+          {/* Default Empty State */}
+          {!result && !loading && tasks.length === 0 && (
+            <div className="flex-1 min-h-[400px] rounded-2xl border border-dashed border-warm-border/60 bg-warm-surface/30 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+              <div className="w-16 h-16 mb-4 rounded-full bg-warm-surface flex items-center justify-center border border-warm-border/50">
+                <svg className="w-8 h-8 text-charcoal/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
               </div>
-
-              <div className="text-right">
-                <span className={`inline-flex items-center px-3 py-1 rounded-lg border text-sm ${actionClassName}`}>
-                  {result.actionLabel}
-                </span>
-                <p className={`text-xs mt-2 ${confidenceClassName}`}>
-                  置信度: {result.confidenceLevel} ({result.confidenceScore})
-                </p>
-                <p className="text-xs text-slate-500 mt-1">模式: {result.analysisMode === 'deep' ? '深度' : '快速'}</p>
-                <p className="text-xs text-slate-500 mt-1">最新交易日: {result.latestDate}</p>
-              </div>
+              <h3 className="text-base font-medium text-charcoal mb-1">准备开始分析</h3>
+              <p className="text-sm text-charcoal-muted max-w-sm">
+                在上方输入基金代码，并选择快速或深度模式，即可开始查看分析结论。
+              </p>
             </div>
-          </section>
-
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="text-xs text-slate-500">当前价格</p>
-              <p className="text-xl font-semibold text-slate-900 mt-1">{fmt(result.currentPrice)}</p>
-              <p className="text-xs text-slate-500 mt-2">
-                MA5 {fmt(result.ma5)} | MA10 {fmt(result.ma10)} | MA20 {fmt(result.ma20)}
-              </p>
-            </article>
-            <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="text-xs text-slate-500">趋势与评分</p>
-              <p className="text-base font-medium text-slate-900 mt-1">{result.trendStatus}</p>
-              <p className="text-xs text-slate-500 mt-2">
-                信号: {result.buySignal} | 综合评分: {result.signalScore}
-              </p>
-            </article>
-            <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="text-xs text-slate-500">量能状态</p>
-              <p className="text-base font-medium text-slate-900 mt-1">{result.volumeStatus}</p>
-              <p className="text-xs text-slate-500 mt-2">量比(5日): {fmt(result.volumeRatio5d, 2)}</p>
-            </article>
-          </section>
-
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">MACD / RSI</h3>
-              <p className="text-xs text-slate-500">
-                DIF {fmt(result.macd?.dif)} | DEA {fmt(result.macd?.dea)} | BAR {fmt(result.macd?.bar)}
-              </p>
-              <p className="text-sm text-slate-900 mt-2">{result.macd?.status || '--'}</p>
-              <p className="text-xs text-slate-500 mt-1">{result.macd?.signal || '--'}</p>
-              <hr className="border-slate-200 my-3" />
-              <p className="text-xs text-slate-500">
-                RSI6 {fmt(result.rsi?.rsi6, 1)} | RSI12 {fmt(result.rsi?.rsi12, 1)} | RSI24 {fmt(result.rsi?.rsi24, 1)}
-              </p>
-              <p className="text-sm text-slate-900 mt-2">{result.rsi?.status || '--'}</p>
-              <p className="text-xs text-slate-500 mt-1">{result.rsi?.signal || '--'}</p>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">规则判定</h3>
-              <div className="space-y-1 text-sm">
-                <p className="text-slate-700">
-                  {result.ruleAssessment?.entryRule || '前大后小，金叉就搞'}：
-                  <span className={result.ruleAssessment?.entryReady ? 'text-emerald-700' : 'text-slate-500'}>
-                    {result.ruleAssessment?.entryReady ? '已满足' : '未满足'}
-                  </span>
-                </p>
-                <p className="text-slate-700">
-                  {result.ruleAssessment?.exitRule || '前高后低，放量就跑'}：
-                  <span className={result.ruleAssessment?.exitTriggered ? 'text-rose-700' : 'text-slate-500'}>
-                    {result.ruleAssessment?.exitTriggered ? '已触发' : '未触发'}
-                  </span>
-                </p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                {result.ruleAssessment?.comment || '规则条件暂未满足，继续观察'}
-              </p>
-            </article>
-          </section>
-
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900 mb-2">策略位建议</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-slate-500 text-xs">买入区间</p>
-                <p className="mt-1 text-slate-900">
-                  {fmt(result.strategy?.buyZone?.low)} - {fmt(result.strategy?.buyZone?.high)}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">{result.strategy?.buyZone?.description || '--'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">加仓区间</p>
-                <p className="mt-1 text-slate-900">
-                  {fmt(result.strategy?.addZone?.low)} - {fmt(result.strategy?.addZone?.high)}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">{result.strategy?.addZone?.description || '--'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">止损 / 止盈</p>
-                <p className="mt-1 text-slate-900">
-                  {fmt(result.strategy?.stopLoss)} / {fmt(result.strategy?.takeProfit)}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs">仓位建议</p>
-                <p className="mt-1 text-slate-900">{result.strategy?.positionAdvice || '--'}</p>
-              </div>
-            </div>
-          </section>
-
-          {result.analysisMode === 'deep' && (
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">深度分析</h3>
-              {result.deepAnalysis?.status === 'completed' ? (
-                <div className="space-y-3 text-sm">
-                  <p className="text-slate-700">
-                    {result.deepAnalysis.summary?.analysisSummary || '深度分析已完成，暂无摘要'}
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-slate-500">深度建议 / 趋势</p>
-                      <p className="text-slate-900 mt-1">
-                        {(result.deepAnalysis.summary?.operationAdvice || '--')} /{' '}
-                        {(result.deepAnalysis.summary?.trendPrediction || '--')}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">情绪评分</p>
-                      <p className="text-slate-900 mt-1">
-                        {result.deepAnalysis.summary?.sentimentScore ?? '--'}{' '}
-                        {result.deepAnalysis.summary?.sentimentLabel || ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-slate-500">深度策略位</p>
-                      <p className="text-slate-900 mt-1">
-                        理想买点 {fmt(result.deepAnalysis.strategy?.idealBuy)} | 次级买点{' '}
-                        {fmt(result.deepAnalysis.strategy?.secondaryBuy)}
-                      </p>
-                      <p className="text-slate-900 mt-1">
-                        止损 {fmt(result.deepAnalysis.strategy?.stopLoss)} | 止盈{' '}
-                        {fmt(result.deepAnalysis.strategy?.takeProfit)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">深度明细</p>
-                      <p className="text-slate-700 mt-1 leading-relaxed">
-                        {result.deepAnalysis.details?.newsSummary || '暂无新闻摘要'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  深度分析暂不可用，已自动回退快速模式结果。
-                  {result.deepAnalysis?.error ? ` 原因: ${result.deepAnalysis.error}` : ''}
-                </div>
-              )}
-            </section>
           )}
 
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">做多依据</h3>
-              {reasonItems.length > 0 ? (
-                <ul className="space-y-1 text-sm text-slate-600 list-disc pl-4">
-                  {reasonItems.map((item, index) => (
-                    <li key={`${item}-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">暂无</p>
-              )}
-            </article>
-
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">风险提示</h3>
-              {riskItems.length > 0 ? (
-                <ul className="space-y-1 text-sm text-slate-600 list-disc pl-4">
-                  {riskItems.map((item, index) => (
-                    <li key={`${item}-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-500">暂无</p>
-              )}
-            </article>
-          </section>
+          {/* Current Result */}
+          {result && !loading && (
+             <div className="animate-slide-up">
+               <h3 className="text-xs font-semibold tracking-wider uppercase text-charcoal-muted mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-clay"></span>
+                  当前分析
+               </h3>
+               <HeroSummary result={result} />
+             </div>
+          )}
+          
+          {/* Active Tasks */}
+          <div className={`transition-all duration-500 ${tasks.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 hidden'}`}>
+             <h3 className="text-xs font-semibold tracking-wider uppercase text-charcoal-muted mb-3 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 animate-spin-slow" fill="none" viewBox="0 0 24 24">
+                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                异步任务
+             </h3>
+             <AsyncTaskIndicator 
+               tasks={tasks} 
+               loading={tasksLoading} 
+               onRefresh={() => fetchTasks(false)} 
+             />
+          </div>
         </div>
-      )}
+
+        {/* Right Column (History Rail) - Approx 1/3 width */}
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col gap-3">
+          <h3 className="text-xs font-semibold tracking-wider uppercase text-charcoal-muted flex items-center justify-between">
+            <span>历史归档</span>
+            {historyLoading && <span className="text-[10px] text-clay/70 tracking-normal bg-clay/5 px-2 py-0.5 rounded-full">同步中...</span>}
+          </h3>
+          <div className="bg-warm-surface rounded-2xl border border-warm-border p-2">
+             <HistoryList 
+               items={historyItems} 
+               loading={historyLoading} 
+               onSelect={handleHistorySelect} 
+               onRefresh={() => fetchHistory(false)} 
+             />
+          </div>
+        </div>
+
+      </div>
+
+      {/* Detail Drawer Side Panel */}
+      <DetailDrawer 
+        open={drawerOpen} 
+        onClose={() => setDrawerOpen(false)} 
+        result={drawerResult} 
+        loading={drawerLoading} 
+      />
     </div>
   );
 };

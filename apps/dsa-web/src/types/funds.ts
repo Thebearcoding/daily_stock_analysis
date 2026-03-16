@@ -107,3 +107,105 @@ export interface FundAdviceResponse {
   deepAnalysis?: DeepAnalysisPayload | null;
   generatedAt: string;
 }
+
+// ── Phase 5: Fund async task types ──
+
+export interface FundTaskInfo {
+  taskId: string;
+  fundCode: string;
+  fundName?: string | null;
+  assetType: string;
+  analysisMode?: string | null;
+  status: string;
+  progress: number;
+  message?: string | null;
+  error?: string | null;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+}
+
+export interface FundTaskListResponse {
+  total: number;
+  pending: number;
+  processing: number;
+  tasks: FundTaskInfo[];
+}
+
+export interface FundTaskAccepted {
+  taskId: string;
+  status: string;
+  message: string;
+}
+
+export interface FundTaskStatus {
+  taskId: string;
+  status: string;
+  progress: number;
+  fundCode?: string | null;
+  analysisCode?: string | null;
+  analysisMode?: string | null;
+  recordId?: number | null;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  createdAt?: string | null;
+}
+
+// ── Phase 5: Fund history types ──
+
+export interface FundHistoryItem {
+  id: number;
+  queryId?: string | null;
+  fundCode: string;
+  fundName?: string | null;
+  analysisCode: string;
+  analysisName?: string | null;
+  analysisMode?: string | null;
+  action?: string | null;
+  confidenceScore?: number | null;
+  createdAt: string;
+}
+
+export interface FundHistoryListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  items: FundHistoryItem[];
+}
+
+export interface FundHistoryDetailResponse {
+  id: number;
+  queryId?: string | null;
+  fundCode: string;
+  fundName?: string | null;
+  analysisCode: string;
+  analysisName?: string | null;
+  analysisMode?: string | null;
+  reportType?: string | null;
+  action?: string | null;
+  actionLabel?: string | null;
+  confidenceScore?: number | null;
+  confidenceLevel?: string | null;
+  strategy?: FundStrategy | null;
+  reasons?: string[] | null;
+  riskFactors?: string[] | null;
+  ruleAssessment?: RuleAssessment | null;
+  indicators?: {
+    currentPrice?: number | null;
+    trendStatus?: string | null;
+    buySignal?: string | null;
+    signalScore?: number | null;
+    ma5?: number | null;
+    ma10?: number | null;
+    ma20?: number | null;
+    ma60?: number | null;
+    volumeStatus?: string | null;
+    volumeRatio5d?: number | null;
+    macd?: MacdSnapshot | null;
+    rsi?: RsiSnapshot | null;
+  } | null;
+  deepAnalysis?: DeepAnalysisPayload | null;
+  mappingNote?: string | null;
+  analysisSummary?: string | null;
+  createdAt?: string | null;
+}

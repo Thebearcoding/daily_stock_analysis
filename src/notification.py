@@ -1427,6 +1427,155 @@ class NotificationService(
 
         return "\n".join(lines)
 
+    def generate_fund_advice_report(
+        self,
+        advice: Dict[str, Any],
+        *,
+        record_id: Optional[int] = None,
+    ) -> str:
+        """
+        生成基金分析推送报告。
+
+        用于基金 analyze_and_persist 成功后的通知推送，保持格式紧凑，
+        但覆盖基金身份、映射/净值路径、策略位、风险和持仓摘要。
+        """
+        report_date = datetime.now().strftime('%Y-%m-%d %H:%M')
+        fund_code = str(advice.get("fund_code") or advice.get("input_code") or "")
+        fund_name = self._escape_md(
+            str(advice.get("fund_name") or advice.get("input_name") or f"基金{fund_code}")
+        )
+        analysis_code = str(advice.get("analysis_code") or fund_code)
+        analysis_name_raw = advice.get("analysis_name")
+        analysis_name = self._escape_md(str(analysis_name_raw)) if analysis_name_raw else ""
+        latest_date = advice.get("latest_date") or "N/A"
+        action_label = advice.get("action_label") or advice.get("action") or "观察"
+        confidence_score = advice.get("confidence_score", "N/A")
+        confidence_level = advice.get("confidence_level") or "未知"
+        trend_status = advice.get("trend_status") or "未知"
+        current_price = advice.get("current_price", "N/A")
+        analysis_mode = advice.get("analysis_mode") or "fast"
+        mapping_note = advice.get("mapping_note")
+        deep_analysis = advice.get("deep_analysis") or {}
+        strategy = advice.get("strategy") or {}
+        rule_assessment = advice.get("rule_assessment") or {}
+        indicators = {
+            "ma20": advice.get("ma20"),
+            "ma60": advice.get("ma60"),
+            "rsi": (advice.get("rsi") or {}).get("status"),
+            "macd": (advice.get("macd") or {}).get("status"),
+        }
+        analysis_context = advice.get("analysis_context") or {}
+        holdings_summary = analysis_context.get("holdings_summary") or {}
+
+        lines = [
+            f"## 🧭 {fund_name} ({fund_code})",
+            "",
+            (
+                f"> {report_date} | 动作: **{action_label}** | "
+                f"置信度: **{confidence_score} ({confidence_level})** | "
+                f"模式: `{analysis_mode}`"
+            ),
+            "",
+            "### 📌 核心概览",
+            "",
+            f"- 最新日期: **{latest_date}**",
+            f"- 当前净值/价格: **{current_price}**",
+            f"- 趋势状态: **{trend_status}**",
+            f"- 实际分析标的: **{analysis_code}**" + (f"（{analysis_name}）" if analysis_name else ""),
+        ]
+
+        if record_id is not None:
+            lines.append(f"- 历史记录 ID: **{record_id}**")
+        if mapping_note:
+            lines.append(f"- 路由说明: {mapping_note}")
+
+        reasons = advice.get("reasons") or []
+        if reasons:
+            lines.extend(["", "### ✅ 主要依据", ""])
+            for reason in reasons[:5]:
+                lines.append(f"- {reason}")
+
+        risks = advice.get("risk_factors") or []
+        if risks:
+            lines.extend(["", "### ⚠️ 风险提示", ""])
+            for risk in risks[:5]:
+                lines.append(f"- {risk}")
+
+        if strategy:
+            buy_zone = strategy.get("buy_zone") or {}
+            add_zone = strategy.get("add_zone") or {}
+            lines.extend([
+                "",
+                "### 🎯 策略位",
+                "",
+                "| 买入区 | 加仓区 | 止损 | 止盈 |",
+                "|--------|--------|------|------|",
+                (
+                    f"| {buy_zone.get('low', '-')} ~ {buy_zone.get('high', '-')} "
+                    f"| {add_zone.get('low', '-')} ~ {add_zone.get('high', '-')} "
+                    f"| {strategy.get('stop_loss', '-')} | {strategy.get('take_profit', '-')} |"
+                ),
+            ])
+            position_advice = strategy.get("position_advice")
+            if position_advice:
+                lines.extend(["", f"- 仓位建议: {position_advice}"])
+
+        if rule_assessment:
+            lines.extend([
+                "",
+                "### 🧪 规则判断",
+                "",
+                f"- 入场规则: {rule_assessment.get('entry_rule', '-')}",
+                f"- 离场规则: {rule_assessment.get('exit_rule', '-')}",
+                f"- 入场是否就绪: {'是' if rule_assessment.get('entry_ready') else '否'}",
+                f"- 是否触发减仓: {'是' if rule_assessment.get('exit_triggered') else '否'}",
+            ])
+            if rule_assessment.get("comment"):
+                lines.append(f"- 说明: {rule_assessment['comment']}")
+
+        lines.extend([
+            "",
+            "### 📈 指标快照",
+            "",
+            f"- MA20 / MA60: {indicators['ma20']} / {indicators['ma60']}",
+            f"- MACD: {indicators['macd'] or 'N/A'}",
+            f"- RSI: {indicators['rsi'] or 'N/A'}",
+        ])
+
+        if holdings_summary and holdings_summary.get("source_type") != "unavailable":
+            dominant_themes = holdings_summary.get("dominant_themes") or []
+            theme_text = "、".join(dominant_themes) if dominant_themes else "未形成单一强主线"
+            lines.extend([
+                "",
+                "### 🧱 披露持仓摘要",
+                "",
+                f"- 数据语义: {holdings_summary.get('source_type')} / 实时={holdings_summary.get('is_realtime', False)}",
+                f"- 截止日期: {holdings_summary.get('as_of_date') or 'N/A'}",
+                f"- 集中度: {holdings_summary.get('concentration_level') or 'N/A'}",
+                f"- 主题倾向: {theme_text}",
+            ])
+
+        if deep_analysis:
+            lines.extend([
+                "",
+                "### 🧠 深度分析",
+                "",
+                f"- 状态: {deep_analysis.get('status', 'unknown')}",
+            ])
+            summary = (deep_analysis.get("summary") or {}).get("analysis_summary")
+            if summary:
+                lines.append(f"- 摘要: {summary}")
+            error = deep_analysis.get("error")
+            if error:
+                lines.append(f"- 说明: {error}")
+
+        lines.extend([
+            "",
+            "---",
+            "*基金分析结果已复用现有通知渠道推送；披露持仓为季度快照，不构成实时仓位。*",
+        ])
+        return "\n".join(lines)
+
     # Display name mapping for realtime data sources
     _SOURCE_DISPLAY_NAMES = {
         "tencent": "腾讯财经",

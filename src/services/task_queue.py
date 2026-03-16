@@ -49,6 +49,9 @@ class TaskInfo:
     task_id: str
     stock_code: str
     stock_name: Optional[str] = None
+    asset_type: str = "stock"                  # "stock" or "fund"
+    analysis_mode: Optional[str] = None        # "fast"/"deep" (fund only)
+    days: Optional[int] = None                 # analysis window (fund only)
     status: TaskStatus = TaskStatus.PENDING
     progress: int = 0
     message: Optional[str] = None
@@ -65,6 +68,8 @@ class TaskInfo:
             "task_id": self.task_id,
             "stock_code": self.stock_code,
             "stock_name": self.stock_name,
+            "asset_type": self.asset_type,
+            "analysis_mode": self.analysis_mode,
             "status": self.status.value,
             "progress": self.progress,
             "message": self.message,
@@ -81,6 +86,9 @@ class TaskInfo:
             task_id=self.task_id,
             stock_code=self.stock_code,
             stock_name=self.stock_name,
+            asset_type=self.asset_type,
+            analysis_mode=self.analysis_mode,
+            days=self.days,
             status=self.status,
             progress=self.progress,
             message=self.message,
@@ -138,7 +146,7 @@ class AnalysisTaskQueue:
         
         # 核心数据结构
         self._tasks: Dict[str, TaskInfo] = {}           # task_id -> TaskInfo
-        self._analyzing_stocks: Dict[str, str] = {}     # stock_code -> task_id
+        self._analyzing_items: Dict[str, str] = {}      # "asset_type:code" -> task_id
         self._futures: Dict[str, Future] = {}           # task_id -> Future
         
         # SSE 订阅者列表（asyncio.Queue 实例）
@@ -169,31 +177,35 @@ class AnalysisTaskQueue:
     
     # ========== 任务提交与查询 ==========
     
-    def is_analyzing(self, stock_code: str) -> bool:
+    def is_analyzing(self, stock_code: str, asset_type: str = "stock") -> bool:
         """
-        检查股票是否正在分析中
+        检查标的是否正在分析中
         
         Args:
-            stock_code: 股票代码
+            stock_code: 标的代码
+            asset_type: 资产类型
             
         Returns:
             True 表示正在分析中
         """
+        dedupe_key = f"{asset_type}:{stock_code}"
         with self._data_lock:
-            return stock_code in self._analyzing_stocks
+            return dedupe_key in self._analyzing_items
     
-    def get_analyzing_task_id(self, stock_code: str) -> Optional[str]:
+    def get_analyzing_task_id(self, stock_code: str, asset_type: str = "stock") -> Optional[str]:
         """
-        获取正在分析该股票的任务 ID
+        获取正在分析该标的的任务 ID
         
         Args:
-            stock_code: 股票代码
+            stock_code: 标的代码
+            asset_type: 资产类型
             
         Returns:
             任务 ID，如果没有则返回 None
         """
+        dedupe_key = f"{asset_type}:{stock_code}"
         with self._data_lock:
-            return self._analyzing_stocks.get(stock_code)
+            return self._analyzing_items.get(dedupe_key)
     
     def submit_task(
         self,
@@ -201,27 +213,35 @@ class AnalysisTaskQueue:
         stock_name: Optional[str] = None,
         report_type: str = "detailed",
         force_refresh: bool = False,
+        asset_type: str = "stock",
+        analysis_mode: Optional[str] = None,
+        days: Optional[int] = None,
     ) -> TaskInfo:
         """
         提交分析任务
         
         Args:
-            stock_code: 股票代码
-            stock_name: 股票名称（可选）
-            report_type: 报告类型
+            stock_code: 标的代码（股票代码或基金代码）
+            stock_name: 标的名称（可选）
+            report_type: 报告类型（股票用）
             force_refresh: 是否强制刷新
+            asset_type: 资产类型 ("stock" or "fund")
+            analysis_mode: 分析模式 ("fast"/"deep"，基金用)
             
         Returns:
             TaskInfo: 任务信息
             
         Raises:
-            DuplicateTaskError: 股票正在分析中
+            DuplicateTaskError: 标的正在分析中
         """
-        stock_code = canonical_stock_code(stock_code)
+        if asset_type == "stock":
+            stock_code = canonical_stock_code(stock_code)
+        dedupe_key = f"{asset_type}:{stock_code}"
+
         with self._data_lock:
-            # 检查重复
-            if stock_code in self._analyzing_stocks:
-                existing_task_id = self._analyzing_stocks[stock_code]
+            # 检查重复（asset-aware）
+            if dedupe_key in self._analyzing_items:
+                existing_task_id = self._analyzing_items[dedupe_key]
                 raise DuplicateTaskError(stock_code, existing_task_id)
             
             # 创建任务
@@ -230,6 +250,9 @@ class AnalysisTaskQueue:
                 task_id=task_id,
                 stock_code=stock_code,
                 stock_name=stock_name,
+                asset_type=asset_type,
+                analysis_mode=analysis_mode,
+                days=days,
                 status=TaskStatus.PENDING,
                 message="任务已加入队列",
                 report_type=report_type,
@@ -237,7 +260,7 @@ class AnalysisTaskQueue:
             
             # 注册任务
             self._tasks[task_id] = task_info
-            self._analyzing_stocks[stock_code] = task_id
+            self._analyzing_items[dedupe_key] = task_id
             
             # 提交到线程池执行
             future = self.executor.submit(
@@ -249,7 +272,7 @@ class AnalysisTaskQueue:
             )
             self._futures[task_id] = future
             
-            logger.info(f"[TaskQueue] 任务已提交: {stock_code} -> {task_id}")
+            logger.info(f"[TaskQueue] 任务已提交: {dedupe_key} -> {task_id}")
         
         # 广播任务创建事件（锁外执行避免死锁）
         self._broadcast_event("task_created", task_info.to_dict())
@@ -330,16 +353,8 @@ class AnalysisTaskQueue:
         force_refresh: bool,
     ) -> Optional[Dict[str, Any]]:
         """
-        执行分析任务（在线程池中运行）
-        
-        Args:
-            task_id: 任务 ID
-            stock_code: 股票代码
-            report_type: 报告类型
-            force_refresh: 是否强制刷新
-            
-        Returns:
-            分析结果字典
+        执行分析任务（在线程池中运行）。
+        按 asset_type 分发到 _run_stock_task / _run_fund_task。
         """
         # 更新状态为处理中
         with self._data_lock:
@@ -350,24 +365,21 @@ class AnalysisTaskQueue:
             task.started_at = datetime.now()
             task.message = "正在分析中..."
             task.progress = 10
+            asset_type = task.asset_type
+            analysis_mode = task.analysis_mode
+            days = task.days
         
         self._broadcast_event("task_started", task.to_dict())
         
+        dedupe_key = f"{asset_type}:{stock_code}"
+
         try:
-            # 导入分析服务（延迟导入避免循环依赖）
-            from src.services.analysis_service import AnalysisService
-            
-            # 执行分析
-            service = AnalysisService()
-            result = service.analyze_stock(
-                stock_code=stock_code,
-                report_type=report_type,
-                force_refresh=force_refresh,
-                query_id=task_id,
-            )
+            if asset_type == "fund":
+                result = self._run_fund_task(task_id, stock_code, analysis_mode, days)
+            else:
+                result = self._run_stock_task(task_id, stock_code, report_type, force_refresh)
             
             if result:
-                # 更新任务状态为完成
                 with self._data_lock:
                     task = self._tasks.get(task_id)
                     if task:
@@ -376,45 +388,67 @@ class AnalysisTaskQueue:
                         task.completed_at = datetime.now()
                         task.result = result
                         task.message = "分析完成"
-                        task.stock_name = result.get("stock_name", task.stock_name)
-                        
-                        # 从分析中集合移除
-                        if task.stock_code in self._analyzing_stocks:
-                            del self._analyzing_stocks[task.stock_code]
+                        if asset_type == "stock":
+                            task.stock_name = result.get("stock_name", task.stock_name)
+                        self._analyzing_items.pop(dedupe_key, None)
                 
                 self._broadcast_event("task_completed", task.to_dict())
-                logger.info(f"[TaskQueue] 任务完成: {task_id} ({stock_code})")
-                
-                # 清理过期任务
+                logger.info(f"[TaskQueue] 任务完成: {task_id} ({dedupe_key})")
                 self._cleanup_old_tasks()
-                
                 return result
             else:
-                # 分析返回空结果
                 raise Exception("分析返回空结果")
                 
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"[TaskQueue] 任务失败: {task_id} ({stock_code}), 错误: {error_msg}")
+            logger.error(f"[TaskQueue] 任务失败: {task_id} ({dedupe_key}), 错误: {error_msg}")
             
             with self._data_lock:
                 task = self._tasks.get(task_id)
                 if task:
                     task.status = TaskStatus.FAILED
                     task.completed_at = datetime.now()
-                    task.error = error_msg[:200]  # 限制错误信息长度
+                    task.error = error_msg[:200]
                     task.message = f"分析失败: {error_msg[:50]}"
-                    
-                    # 从分析中集合移除
-                    if task.stock_code in self._analyzing_stocks:
-                        del self._analyzing_stocks[task.stock_code]
+                    self._analyzing_items.pop(dedupe_key, None)
             
             self._broadcast_event("task_failed", task.to_dict())
-            
-            # 清理过期任务
             self._cleanup_old_tasks()
-            
             return None
+    
+    def _run_stock_task(
+        self,
+        task_id: str,
+        stock_code: str,
+        report_type: str,
+        force_refresh: bool,
+    ) -> Optional[Dict[str, Any]]:
+        """执行股票分析任务。"""
+        from src.services.analysis_service import AnalysisService
+        service = AnalysisService()
+        return service.analyze_stock(
+            stock_code=stock_code,
+            report_type=report_type,
+            force_refresh=force_refresh,
+            query_id=task_id,
+        )
+    
+    def _run_fund_task(
+        self,
+        task_id: str,
+        fund_code: str,
+        mode: Optional[str],
+        days: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """执行基金分析任务。"""
+        from src.services.fund_advice_service import FundAdviceService
+        service = FundAdviceService()
+        return service.analyze_and_persist(
+            fund_code=fund_code,
+            days=days or 120,
+            mode=mode or "fast",
+            query_id=task_id,
+        )
     
     def _cleanup_old_tasks(self) -> int:
         """

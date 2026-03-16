@@ -33,8 +33,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
     );
   }
 
-  const queryId = 'queryId' in data ? data.queryId : report.meta.queryId;
-  const report: AnalysisReport = 'report' in data ? data.report : data;
+  // 使用 report id，因为 queryId 在批量分析时可能重复，且历史报告详情接口需要 recordId 来获取关联资讯和详情数据
   // 使用 report id，因为 queryId 在批量分析时可能重复，且历史报告详情接口需要 recordId 来获取关联资讯和详情数据
   const recordId = report.meta.id;
 

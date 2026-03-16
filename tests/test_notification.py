@@ -221,6 +221,65 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("600519", out)
 
     @mock.patch("src.notification.get_config")
+    def test_generate_fund_advice_report_contains_fund_specific_fields(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=True)
+        service = NotificationService()
+
+        advice = {
+            "fund_code": "018957",
+            "fund_name": "中航机遇领航混合型发起式证券投资基金",
+            "analysis_code": "018957",
+            "analysis_name": "中航机遇领航混合型发起式证券投资基金",
+            "analysis_mode": "fast",
+            "latest_date": "2026-03-16",
+            "current_price": 1.2345,
+            "trend_status": "震荡上行",
+            "action": "hold",
+            "action_label": "持有观察",
+            "confidence_score": 68,
+            "confidence_level": "中",
+            "ma20": 1.20,
+            "ma60": 1.15,
+            "macd": {"status": "金叉"},
+            "rsi": {"status": "偏强"},
+            "strategy": {
+                "buy_zone": {"low": 1.18, "high": 1.21},
+                "add_zone": {"low": 1.22, "high": 1.24},
+                "stop_loss": 1.12,
+                "take_profit": 1.32,
+                "position_advice": "分批观察建仓",
+            },
+            "rule_assessment": {
+                "entry_rule": "前大后小，金叉就搞",
+                "exit_rule": "前高后低，转弱就跑",
+                "entry_ready": True,
+                "exit_triggered": False,
+                "comment": "净值趋势改善中",
+            },
+            "reasons": ["MA20 上方运行", "披露持仓聚焦 CPO/光模块"],
+            "risk_factors": ["披露持仓为季度快照"],
+            "analysis_context": {
+                "holdings_summary": {
+                    "source_type": "fund_disclosed_holdings",
+                    "is_realtime": False,
+                    "as_of_date": "2025年4季度股票投资明细",
+                    "concentration_level": "high",
+                    "dominant_themes": ["CPO/光模块", "AI算力硬件"],
+                }
+            },
+            "deep_analysis": {"status": "completed", "summary": {"analysis_summary": "主题强于净值斜率"}},
+        }
+
+        out = service.generate_fund_advice_report(advice, record_id=88)
+
+        self.assertIn("018957", out)
+        self.assertIn("中航机遇领航混合型发起式证券投资基金", out)
+        self.assertIn("持有观察", out)
+        self.assertIn("历史记录 ID", out)
+        self.assertIn("披露持仓摘要", out)
+        self.assertIn("fund_disclosed_holdings", out)
+
+    @mock.patch("src.notification.get_config")
     def test_history_compare_context_uses_cache(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_history_compare_n=3)
         service = NotificationService()

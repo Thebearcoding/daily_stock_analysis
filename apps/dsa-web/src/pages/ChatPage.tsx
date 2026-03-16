@@ -236,27 +236,27 @@ const ChatPage: React.FC = () => {
   };
 
   const renderThinkingDetails = (steps: ProgressStep[]) => (
-    <div className="mb-3 pl-5 border-l border-white/5 space-y-0.5 animate-fade-in">
+    <div className="mb-3 pl-5 border-l border-warm-border/50 space-y-0.5 animate-fade-in">
       {steps.map((step, idx) => {
         let icon = '⋯';
         let text = '';
-        let colorClass = 'text-muted';
+        let colorClass = 'text-charcoal-muted';
         if (step.type === 'thinking') {
           icon = '🤔';
           text = step.message || `第 ${step.step} 步：思考`;
-          colorClass = 'text-secondary';
+          colorClass = 'text-charcoal';
         } else if (step.type === 'tool_start') {
           icon = '⚙️';
           text = `${step.display_name || step.tool}...`;
-          colorClass = 'text-secondary';
+          colorClass = 'text-charcoal';
         } else if (step.type === 'tool_done') {
           icon = step.success ? '✅' : '❌';
           text = `${step.display_name || step.tool} (${step.duration}s)`;
-          colorClass = step.success ? 'text-green-400' : 'text-red-400';
+          colorClass = step.success ? 'text-emerald-600' : 'text-red-500';
         } else if (step.type === 'generating') {
           icon = '✍️';
           text = step.message || '生成分析';
-          colorClass = 'text-cyan';
+          colorClass = 'text-clay';
         }
         return (
           <div
@@ -273,11 +273,11 @@ const ChatPage: React.FC = () => {
 
   const sidebarContent = (
     <>
-      <div className="p-3 border-b border-white/5 flex items-center justify-between">
-        <span className="text-sm font-medium text-white">历史对话</span>
+      <div className="p-3 border-b border-warm-border/50 flex items-center justify-between">
+        <span className="text-sm font-medium text-charcoal">历史对话</span>
         <button
           onClick={handleStartNewChat}
-          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-secondary hover:text-white"
+          className="p-1.5 rounded-lg hover:bg-warm-surface-alt transition-colors text-charcoal-muted hover:text-charcoal"
           title="新对话"
         >
           <svg
@@ -297,20 +297,20 @@ const ChatPage: React.FC = () => {
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {sessionsLoading ? (
-          <div className="p-4 text-center text-xs text-muted">加载中...</div>
+          <div className="p-4 text-center text-xs text-charcoal-muted">加载中...</div>
         ) : sessions.length === 0 ? (
-          <div className="p-4 text-center text-xs text-muted">暂无历史对话</div>
+          <div className="p-4 text-center text-xs text-charcoal-muted">暂无历史对话</div>
         ) : (
           sessions.map((s) => (
             <button
               key={s.session_id}
               onClick={() => handleSwitchSession(s.session_id)}
-              className={`w-full text-left px-3 py-2.5 border-b border-white/5 hover:bg-white/5 transition-colors group ${
-                s.session_id === sessionId ? 'bg-white/10' : ''
+              className={`w-full text-left px-3 py-2.5 border-b border-warm-border/30 hover:bg-warm-surface-alt transition-colors group ${
+                s.session_id === sessionId ? 'bg-warm-surface-alt' : ''
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-secondary group-hover:text-white truncate flex-1">
+                <span className="text-sm text-charcoal-muted group-hover:text-charcoal truncate flex-1">
                   {s.title}
                 </span>
                 <button
@@ -318,7 +318,7 @@ const ChatPage: React.FC = () => {
                     e.stopPropagation();
                     setDeleteConfirmId(s.session_id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 text-muted hover:text-red-400 transition-all flex-shrink-0"
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-warm-border text-charcoal-muted hover:text-red-500 transition-all flex-shrink-0"
                   title="删除"
                 >
                   <svg
@@ -336,7 +336,7 @@ const ChatPage: React.FC = () => {
                   </svg>
                 </button>
               </div>
-              <div className="text-xs text-muted mt-0.5">
+              <div className="text-xs text-charcoal-muted mt-0.5">
                 {s.message_count} 条消息
                 {s.last_active &&
                   ` · ${new Date(s.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
@@ -349,9 +349,10 @@ const ChatPage: React.FC = () => {
   );
 
   return (
-    <div className="h-screen flex max-w-6xl mx-auto w-full p-4 md:p-6 gap-4">
+    <div className="min-h-screen bg-warm-bg text-charcoal font-sans selection:bg-clay/20 selection:text-charcoal flex flex-col pt-6 md:pt-10">
+    <div className="flex-1 flex max-w-6xl mx-auto w-full px-4 md:px-6 gap-4 pb-6 min-h-0">
       {/* Desktop sidebar */}
-      <div className="hidden md:flex flex-col w-64 flex-shrink-0 glass-card overflow-hidden">
+      <div className="hidden md:flex flex-col w-64 flex-shrink-0 glass-panel rounded-xl overflow-hidden">
         {sidebarContent}
       </div>
 
@@ -361,9 +362,9 @@ const ChatPage: React.FC = () => {
           className="fixed inset-0 z-40 md:hidden"
           onClick={() => setSidebarOpen(false)}
         >
-          <div className="absolute inset-0 bg-black/60" />
+          <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm" />
           <div
-            className="absolute left-0 top-0 bottom-0 w-72 flex flex-col glass-card overflow-hidden border-r border-white/10 shadow-2xl"
+            className="absolute left-0 top-0 bottom-0 w-72 flex flex-col glass-panel overflow-hidden border-r-0 shadow-2xl animate-slide-in-right"
             onClick={(e) => e.stopPropagation()}
           >
             {sidebarContent}
@@ -385,150 +386,97 @@ const ChatPage: React.FC = () => {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="mb-4 flex-shrink-0">
-          <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/10 transition-colors text-secondary hover:text-white"
-              title="历史对话"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-            <svg
-              className="w-6 h-6 text-cyan"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
-            问股
-          </h1>
-          <p className="text-secondary text-sm">
-            向 AI 询问个股分析，获取基于策略的交易建议与实时决策报告。
-          </p>
-          {messages.length > 0 && (
-            <div className="mt-2 flex gap-2 items-center">
-              <button
-                type="button"
-                onClick={() => downloadSession(messages)}
-                className="px-3 py-1.5 rounded-lg text-sm text-secondary hover:text-white hover:bg-white/10 border border-white/10 transition-colors flex items-center gap-1.5"
-                title="导出会话为 Markdown 文件"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+
+        <div className="flex-1 flex flex-col glass-panel rounded-xl overflow-hidden min-h-0 relative z-10 w-full max-w-4xl mx-auto">
+          {/* Integrated card header: title + subtitle + actions */}
+          <div className="px-5 py-4 border-b border-warm-border/50 flex-shrink-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-2">
+                {/* Mobile hamburger */}
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-warm-surface-alt transition-colors text-charcoal-muted hover:text-charcoal"
+                  title="历史对话"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                <svg className="w-5 h-5 text-clay flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                导出会话
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (sending) return;
-                  setSending(true);
-                  setSendToast(null);
-                  try {
-                    const content = formatSessionAsMarkdown(messages);
-                    await agentApi.sendChat(content);
-                    setSendToast({ type: 'success', message: '已发送到通知渠道' });
-                    setTimeout(() => setSendToast(null), 3000);
-                  } catch (err) {
-                    const parsed = getParsedApiError(err);
-                    setSendToast({
-                      type: 'error',
-                      message: parsed.message || '发送失败',
-                    });
-                    setTimeout(() => setSendToast(null), 5000);
-                  } finally {
-                    setSending(false);
-                  }
-                }}
-                disabled={sending}
-                className="px-3 py-1.5 rounded-lg text-sm text-secondary hover:text-white hover:bg-white/10 border border-white/10 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="发送到已配置的通知机器人/邮箱"
-              >
-                {sending ? (
-                  <svg
-                    className="w-4 h-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
+                <div>
+                  <h1 className="text-lg font-serif text-charcoal font-semibold leading-tight">问股</h1>
+                  <p className="text-xs text-charcoal-muted mt-0.5">向 AI 询问个股分析，获取基于策略的交易建议与实时决策报告。</p>
+                </div>
+              </div>
+              {messages.length > 0 && (
+                <div className="flex gap-2 items-center flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => downloadSession(messages)}
+                    className="px-2.5 py-1.5 rounded-lg text-xs text-charcoal-muted hover:text-charcoal hover:bg-warm-surface-alt border border-warm-border/50 transition-colors flex items-center gap-1"
+                    title="导出会话为 Markdown 文件"
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    导出
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (sending) return;
+                      setSending(true);
+                      setSendToast(null);
+                      try {
+                        const content = formatSessionAsMarkdown(messages);
+                        await agentApi.sendChat(content);
+                        setSendToast({ type: 'success', message: '已发送到通知渠道' });
+                        setTimeout(() => setSendToast(null), 3000);
+                      } catch (err) {
+                        const parsed = getParsedApiError(err);
+                        setSendToast({
+                          type: 'error',
+                          message: parsed.message || '发送失败',
+                        });
+                        setTimeout(() => setSendToast(null), 5000);
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    disabled={sending}
+                    className="px-2.5 py-1.5 rounded-lg text-xs text-charcoal-muted hover:text-charcoal hover:bg-warm-surface-alt border border-warm-border/50 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="发送到已配置的通知机器人/邮箱"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                    />
-                  </svg>
-                )}
-                发送
-              </button>
-              {sendToast && (
-                <span
-                  className={`text-sm ${sendToast.type === 'success' ? 'text-green-400' : 'text-red-400'}`}
-                >
-                  {sendToast.message}
-                </span>
+                    {sending ? (
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                    发送
+                  </button>
+                  {sendToast && (
+                    <span className={`text-xs ${sendToast.type === 'success' ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {sendToast.message}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </header>
-
-        <div className="flex-1 flex flex-col glass-card overflow-hidden min-h-0 relative z-10">
+          </div>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar relative z-10">
             {messages.length === 0 && !loading ? (
               <div className="h-full flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 mb-4 rounded-2xl bg-white/5 flex items-center justify-center">
+                <div className="w-16 h-16 mb-4 rounded-2xl bg-warm-surface-alt border border-warm-border flex items-center justify-center shadow-sm">
                   <svg
-                    className="w-8 h-8 text-muted"
+                    className="w-8 h-8 text-charcoal-muted"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -541,10 +489,10 @@ const ChatPage: React.FC = () => {
                     />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-white mb-2">
+                <h3 className="text-lg font-serif font-medium text-charcoal mb-2">
                   开始问股
                 </h3>
-                <p className="text-sm text-secondary max-w-sm mb-6">
+                <p className="text-sm text-charcoal-muted max-w-sm mb-6">
                   输入「分析 600519」或「茅台现在能买吗」，AI
                   将调用实时数据工具为您生成决策报告。
                 </p>
@@ -553,7 +501,7 @@ const ChatPage: React.FC = () => {
                     <button
                       key={i}
                       onClick={() => handleQuickQuestion(q)}
-                      className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-secondary hover:text-white hover:border-cyan/40 hover:bg-cyan/5 transition-all"
+                      className="px-3 py-1.5 rounded-full glass-panel text-sm text-charcoal-muted hover:text-charcoal hover:border-clay/40 transition-all"
                     >
                       {q.label}
                     </button>
@@ -569,22 +517,22 @@ const ChatPage: React.FC = () => {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
                       msg.role === 'user'
-                        ? 'bg-cyan text-black'
-                        : 'bg-white/10 text-white'
+                        ? 'bg-charcoal text-white'
+                        : 'bg-warm-surface-alt border border-warm-border text-charcoal'
                     }`}
                   >
                     {msg.role === 'user' ? 'U' : 'AI'}
                   </div>
                   <div
-                    className={`max-w-[80%] rounded-2xl px-5 py-3.5 ${
+                    className={`max-w-[80%] rounded-2xl px-5 py-3.5 shadow-sm ${
                       msg.role === 'user'
-                        ? 'bg-cyan/10 text-white border border-cyan/20 rounded-tr-sm'
-                        : 'bg-white/5 text-secondary border border-white/10 rounded-tl-sm'
+                        ? 'bg-charcoal text-white border border-charcoal/90 rounded-tr-sm'
+                        : 'bg-warm-bg text-charcoal border border-warm-border rounded-tl-sm'
                     }`}
                   >
                     {msg.role === 'assistant' && msg.strategyName && (
                       <div className="mb-2">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan/10 border border-cyan/20 text-xs text-cyan">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-clay/10 border border-clay/20 text-xs text-clay">
                           <svg
                             className="w-3 h-3"
                             fill="none"
@@ -609,20 +557,20 @@ const ChatPage: React.FC = () => {
                       renderThinkingDetails(msg.thinkingSteps)}
                     {msg.role === 'assistant' ? (
                       <div
-                        className="prose prose-invert prose-sm max-w-none
-                      prose-headings:text-white prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
+                        className="prose prose-sm max-w-none text-charcoal
+                      prose-headings:text-charcoal prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
                       prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
                       prose-p:leading-relaxed prose-p:mb-2 prose-p:last:mb-0
-                      prose-strong:text-white prose-strong:font-semibold
+                      prose-strong:text-charcoal prose-strong:font-semibold
                       prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
-                      prose-code:text-cyan prose-code:bg-white/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
-                      prose-pre:bg-black/30 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-lg prose-pre:p-3
+                      prose-code:text-clay prose-code:bg-clay/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                      prose-pre:bg-warm-surface-alt prose-pre:border prose-pre:border-warm-border prose-pre:rounded-lg prose-pre:p-3
                       prose-table:w-full prose-table:text-sm
-                      prose-th:text-white prose-th:font-medium prose-th:border-white/20 prose-th:px-3 prose-th:py-1.5 prose-th:bg-white/5
-                      prose-td:border-white/10 prose-td:px-3 prose-td:py-1.5
-                      prose-hr:border-white/10 prose-hr:my-3
-                      prose-a:text-cyan prose-a:no-underline hover:prose-a:underline
-                      prose-blockquote:border-cyan/30 prose-blockquote:text-secondary
+                      prose-th:text-charcoal prose-th:font-medium prose-th:border-warm-border/50 prose-th:px-3 prose-th:py-1.5 prose-th:bg-warm-surface-alt
+                      prose-td:border-warm-border/30 prose-td:px-3 prose-td:py-1.5
+                      prose-hr:border-warm-border/50 prose-hr:my-3
+                      prose-a:text-clay prose-a:no-underline hover:prose-a:underline
+                      prose-blockquote:border-clay/30 prose-blockquote:text-charcoal-muted
                     "
                       >
                         <Markdown remarkPlugins={[remarkGfm]}>
@@ -648,16 +596,16 @@ const ChatPage: React.FC = () => {
 
             {loading && (
               <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center flex-shrink-0 text-xs font-bold">
+                <div className="w-8 h-8 rounded-full bg-warm-surface-alt border border-warm-border text-charcoal flex items-center justify-center flex-shrink-0 text-xs font-bold">
                   AI
                 </div>
-                <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-5 py-4 min-w-[200px] max-w-[80%]">
-                  <div className="flex items-center gap-2.5 text-sm text-secondary">
+                <div className="bg-warm-bg border border-warm-border rounded-2xl rounded-tl-sm px-5 py-4 min-w-[200px] max-w-[80%] shadow-sm">
+                  <div className="flex items-center gap-2.5 text-sm text-charcoal-muted">
                     <div className="relative w-4 h-4 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full border-2 border-cyan/20" />
-                      <div className="absolute inset-0 rounded-full border-2 border-cyan border-t-transparent animate-spin" />
+                      <div className="absolute inset-0 rounded-full border-2 border-clay/20" />
+                      <div className="absolute inset-0 rounded-full border-2 border-clay border-t-transparent animate-spin" />
                     </div>
-                    <span className="text-secondary">
+                    <span className="text-charcoal-muted">
                       {getCurrentStage(progressSteps)}
                     </span>
                   </div>
@@ -669,13 +617,13 @@ const ChatPage: React.FC = () => {
           </div>
 
           {/* Input area */}
-          <div className="p-4 md:p-6 border-t border-white/5 bg-black/20 relative z-20">
+          <div className="p-4 md:p-6 border-t border-warm-border/50 bg-warm-surface relative z-20">
             {chatError ? (
               <ApiErrorAlert error={chatError} className="mb-3" />
             ) : null}
             {strategies.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-x-5 gap-y-2 items-start">
-                <span className="text-xs text-muted font-medium uppercase tracking-wider flex-shrink-0 mt-1">
+                <span className="text-xs text-charcoal-muted font-medium uppercase tracking-wider flex-shrink-0 mt-1">
                   策略
                 </span>
                 <label className="flex items-center gap-1.5 text-sm cursor-pointer group mt-0.5">
@@ -685,10 +633,10 @@ const ChatPage: React.FC = () => {
                     value=""
                     checked={selectedStrategy === ''}
                     onChange={() => setSelectedStrategy('')}
-                    className="w-3.5 h-3.5 accent-cyan"
+                    className="w-3.5 h-3.5 accent-clay"
                   />
                   <span
-                    className={`transition-colors text-sm ${selectedStrategy === '' ? 'text-white font-medium' : 'text-secondary group-hover:text-white'}`}
+                    className={`transition-colors text-sm ${selectedStrategy === '' ? 'text-charcoal font-medium' : 'text-charcoal-muted group-hover:text-charcoal'}`}
                   >
                     通用分析
                   </span>
@@ -706,16 +654,16 @@ const ChatPage: React.FC = () => {
                       value={s.id}
                       checked={selectedStrategy === s.id}
                       onChange={() => setSelectedStrategy(s.id)}
-                      className="w-3.5 h-3.5 accent-cyan"
+                      className="w-3.5 h-3.5 accent-clay"
                     />
                     <span
-                      className={`transition-colors text-sm ${selectedStrategy === s.id ? 'text-white font-medium' : 'text-secondary group-hover:text-white'}`}
+                      className={`transition-colors text-sm ${selectedStrategy === s.id ? 'text-charcoal font-medium' : 'text-charcoal-muted group-hover:text-charcoal'}`}
                     >
                       {s.name}
                     </span>
                     {showStrategyDesc === s.id && s.description && (
-                      <div className="absolute left-0 bottom-full mb-2 z-50 w-64 p-2.5 rounded-lg bg-elevated border border-white/10 shadow-xl text-xs text-secondary leading-relaxed pointer-events-none animate-fade-in">
-                        <p className="font-medium text-white mb-1">{s.name}</p>
+                      <div className="absolute left-0 bottom-full mb-2 z-50 w-64 p-2.5 rounded-lg glass-panel shadow-2xl text-xs text-charcoal-muted leading-relaxed pointer-events-none animate-fade-in">
+                        <p className="font-medium text-charcoal mb-1">{s.name}</p>
                         <p>{s.description}</p>
                       </div>
                     )}
@@ -785,6 +733,7 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

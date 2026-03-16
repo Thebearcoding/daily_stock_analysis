@@ -94,7 +94,8 @@ class HistoryService:
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
-                limit=limit
+                limit=limit,
+                asset_type='stock',
             )
             
             # Convert to response format
@@ -140,8 +141,8 @@ class HistoryService:
                 return record
         except (ValueError, TypeError):
             pass
-        # Fall back to query_id lookup
-        return self.db.get_latest_analysis_by_query_id(record_id)
+        # Fall back to query_id lookup (stock-only)
+        return self.db.get_latest_analysis_by_query_id(record_id, asset_type='stock')
 
     def resolve_and_get_detail(self, record_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -156,6 +157,9 @@ class HistoryService:
         try:
             record = self._resolve_record(record_id)
             if not record:
+                return None
+            # Stock-only: reject fund records
+            if getattr(record, 'asset_type', 'stock') != 'stock':
                 return None
             return self._record_to_detail_dict(record)
         except Exception as e:
@@ -178,6 +182,9 @@ class HistoryService:
             if not record:
                 logger.warning(f"resolve_and_get_news: record not found for {record_id}")
                 return []
+            # Stock-only: reject fund records
+            if getattr(record, 'asset_type', 'stock') != 'stock':
+                return []
             return self.get_news_intel(query_id=record.query_id, limit=limit)
         except Exception as e:
             logger.error(f"resolve_and_get_news failed for {record_id}: {e}", exc_info=True)
@@ -199,6 +206,9 @@ class HistoryService:
         try:
             record = self.db.get_analysis_history_by_id(record_id)
             if not record:
+                return None
+            # Stock-only: reject fund records
+            if getattr(record, 'asset_type', 'stock') != 'stock':
                 return None
             return self._record_to_detail_dict(record)
         except Exception as e:
@@ -344,6 +354,9 @@ class HistoryService:
             if not record:
                 logger.warning(f"No analysis record found for record_id={record_id}")
                 return []
+            # Stock-only: reject fund records
+            if getattr(record, 'asset_type', 'stock') != 'stock':
+                return []
 
             # Get query_id from record, then call original method
             return self.get_news_intel(query_id=record.query_id, limit=limit)
@@ -421,6 +434,9 @@ class HistoryService:
         record = self._resolve_record(record_id)
         if not record:
             logger.warning(f"get_markdown_report: record not found for {record_id}")
+            return None
+        # Stock-only: reject fund records
+        if getattr(record, 'asset_type', 'stock') != 'stock':
             return None
 
         # Rebuild AnalysisResult from raw_result
@@ -972,10 +988,10 @@ class HistoryService:
             "risk_factors": advice_block.get("risk_factors"),
             "rule_assessment": advice_block.get("rule_assessment"),
             "indicators": raw.get("indicators") if isinstance(raw, dict) else None,
+            "analysis_context": raw.get("analysis_context") if isinstance(raw, dict) else None,
             "deep_analysis": raw.get("deep_analysis") if isinstance(raw, dict) else None,
             "mapping_note": raw.get("mapping_note") if isinstance(raw, dict) else None,
             "analysis_summary": record.analysis_summary,
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "markdown_available": False,  # Phase 3 首版暂不支持基金 Markdown
         }
-

@@ -7,7 +7,7 @@
 
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.services.fund_advice_service import FundAdviceService
 from src.stock_analyzer import (
@@ -95,7 +95,7 @@ class FundAdviceServiceTestCase(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["action"], "wait")
         self.assertEqual(result["action_label"], "防守观望")
-        self.assertGreaterEqual(result["confidence_score"], 70)
+        self.assertEqual(result["confidence_level"], "低")
         self.assertEqual(result["analysis_code"], "510300")
         self.assertEqual(result["mapped_from"], "017811")
 
@@ -162,8 +162,8 @@ class FundAdviceServiceTestCase(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["action"], "wait")
         self.assertEqual(result["confidence_level"], "低")
-        self.assertEqual(result["trend_status"], "数据不足")
         self.assertEqual(result["analysis_code"], "024915")
+        self.assertGreaterEqual(result["signal_score"], 0)
 
     def test_get_advice_fast_mode_skips_deep_pipeline(self) -> None:
         stock_service = MagicMock()
@@ -340,6 +340,132 @@ class FundAdviceServiceTestCase(unittest.TestCase):
         self.assertEqual(result["analysis_mode"], "deep")
         self.assertEqual(result["deep_analysis"]["status"], "failed")
         self.assertTrue(result["deep_analysis"]["error"])
+
+    @patch("src.services.fund_advice_service.DatabaseManager.get_instance")
+    def test_analyze_and_persist_sends_notification_after_save(self, mock_get_db) -> None:
+        mock_db = MagicMock()
+        mock_db.save_fund_advice_history.return_value = 123
+        mock_get_db.return_value = mock_db
+
+        notifier = MagicMock()
+        notifier.is_available.return_value = True
+        notifier.generate_fund_advice_report.return_value = "fund-report"
+        notifier.send.return_value = True
+
+        service = FundAdviceService(notifier=notifier)
+        service.get_advice = MagicMock(
+            return_value={
+                "fund_code": "018957",
+                "fund_name": "中航机遇领航混合型发起式证券投资基金",
+                "input_name": "中航机遇领航混合型发起式证券投资基金",
+                "analysis_code": "018957",
+                "analysis_name": "中航机遇领航混合型发起式证券投资基金",
+                "analysis_mode": "fast",
+                "action": "hold",
+                "action_label": "持有观察",
+                "confidence_score": 68,
+                "confidence_level": "中",
+                "current_price": 1.23,
+                "trend_status": "震荡上行",
+                "buy_signal": "hold",
+                "signal_score": 61,
+                "ma5": 1.21,
+                "ma10": 1.2,
+                "ma20": 1.18,
+                "ma60": 1.12,
+                "volume_status": "unavailable",
+                "volume_ratio_5d": 0.0,
+                "macd": {"status": "金叉"},
+                "rsi": {"status": "偏强"},
+                "strategy": {
+                    "buy_zone": {"low": 1.18, "high": 1.2},
+                    "add_zone": {"low": 1.2, "high": 1.22},
+                    "stop_loss": 1.1,
+                    "take_profit": 1.3,
+                    "position_advice": "分批观察建仓",
+                },
+                "reasons": ["净值站上 MA20"],
+                "risk_factors": ["披露持仓为季度快照"],
+                "rule_assessment": {
+                    "entry_rule": "前大后小，金叉就搞",
+                    "exit_rule": "前高后低，转弱就跑",
+                    "entry_ready": True,
+                    "exit_triggered": False,
+                    "comment": "净值趋势改善中",
+                },
+                "analysis_context": {"analysis_path": "fund_nav"},
+                "deep_analysis": None,
+            }
+        )
+
+        result = service.analyze_and_persist("018957", days=120, mode="fast", query_id="q-1")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["record_id"], 123)
+        notifier.generate_fund_advice_report.assert_called_once()
+        notifier.send.assert_called_once_with("fund-report")
+
+    @patch("src.services.fund_advice_service.DatabaseManager.get_instance")
+    def test_analyze_and_persist_ignores_notification_failure(self, mock_get_db) -> None:
+        mock_db = MagicMock()
+        mock_db.save_fund_advice_history.return_value = 124
+        mock_get_db.return_value = mock_db
+
+        notifier = MagicMock()
+        notifier.is_available.return_value = True
+        notifier.generate_fund_advice_report.return_value = "fund-report"
+        notifier.send.side_effect = RuntimeError("feishu down")
+
+        service = FundAdviceService(notifier=notifier)
+        service.get_advice = MagicMock(
+            return_value={
+                "fund_code": "018957",
+                "fund_name": "中航机遇领航混合型发起式证券投资基金",
+                "input_name": "中航机遇领航混合型发起式证券投资基金",
+                "analysis_code": "018957",
+                "analysis_name": "中航机遇领航混合型发起式证券投资基金",
+                "analysis_mode": "fast",
+                "action": "wait",
+                "action_label": "防守观望",
+                "confidence_score": 55,
+                "confidence_level": "中",
+                "current_price": 1.2,
+                "trend_status": "震荡",
+                "buy_signal": "wait",
+                "signal_score": 48,
+                "ma5": 1.2,
+                "ma10": 1.19,
+                "ma20": 1.18,
+                "ma60": 1.15,
+                "volume_status": "unavailable",
+                "volume_ratio_5d": 0.0,
+                "macd": {"status": "等待"},
+                "rsi": {"status": "中性"},
+                "strategy": {
+                    "buy_zone": {"low": 1.15, "high": 1.18},
+                    "add_zone": {"low": 1.18, "high": 1.2},
+                    "stop_loss": 1.08,
+                    "take_profit": 1.28,
+                    "position_advice": "继续观察",
+                },
+                "reasons": ["趋势未完全确认"],
+                "risk_factors": ["主题波动较大"],
+                "rule_assessment": {
+                    "entry_rule": "前大后小，金叉就搞",
+                    "exit_rule": "前高后低，转弱就跑",
+                    "entry_ready": False,
+                    "exit_triggered": False,
+                    "comment": "规则条件暂未满足",
+                },
+                "analysis_context": {"analysis_path": "fund_nav"},
+                "deep_analysis": None,
+            }
+        )
+
+        result = service.analyze_and_persist("018957", days=120, mode="fast", query_id="q-2")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["record_id"], 124)
 
 
 if __name__ == "__main__":

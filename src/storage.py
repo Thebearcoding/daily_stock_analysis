@@ -356,6 +356,46 @@ class BacktestResult(Base):
     )
 
 
+class FundHoldingsSnapshot(Base):
+    """
+    基金持仓快照表（Phase 3B）。
+
+    每行代表一条持仓明细（stock_code + weight）。
+    同一批快照按 (fund_code, source_type, as_of_date) 分组识别。
+    analysis_history_id 可空：独立预览快照不绑定历史记录。
+    """
+
+    __tablename__ = 'fund_holdings_snapshot'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 可选关联到 analysis_history
+    analysis_history_id = Column(Integer, nullable=True, index=True)
+
+    # 基金身份
+    fund_code = Column(String(16), nullable=False)
+    fund_name = Column(String(128), nullable=True)
+    analysis_code = Column(String(16), nullable=False)
+
+    # 数据来源语义
+    source_type = Column(String(32), nullable=False, default='unavailable')
+    completeness = Column(String(16), nullable=False, default='unavailable')
+    as_of_date = Column(String(32), nullable=True)
+
+    # 持仓明细
+    stock_code = Column(String(16), nullable=False)
+    stock_name = Column(String(64), nullable=True)
+    weight = Column(Float, nullable=True)
+    rank = Column(Integer, nullable=True)
+
+    fetched_at = Column(DateTime, default=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_fund_holdings_fund_code', 'fund_code', 'as_of_date'),
+        Index('ix_fund_holdings_analysis_history', 'analysis_history_id'),
+    )
+
+
 class BacktestSummary(Base):
     """回测汇总指标（按股票或全局）。"""
 
@@ -1002,6 +1042,7 @@ class DatabaseManager:
         days: int = 30,
         limit: int = 50,
         exclude_query_id: Optional[str] = None,
+        asset_type: Optional[str] = None,
     ) -> List[AnalysisHistory]:
         """
         Query analysis history records.
@@ -1010,11 +1051,15 @@ class DatabaseManager:
         - If query_id is provided, perform exact lookup and ignore days window.
         - If query_id is not provided, apply days-based time filtering.
         - exclude_query_id: exclude records with this query_id (for history comparison).
+        - asset_type: filter by asset_type ('stock' or 'fund'); None = no filter.
         """
         cutoff_date = datetime.now() - timedelta(days=days)
 
         with self.get_session() as session:
             conditions = []
+
+            if asset_type:
+                conditions.append(AnalysisHistory.asset_type == asset_type)
 
             if query_id:
                 conditions.append(AnalysisHistory.query_id == query_id)
@@ -1079,7 +1124,8 @@ class DatabaseManager:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        asset_type: Optional[str] = None,
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
@@ -1090,6 +1136,7 @@ class DatabaseManager:
             end_date: 结束日期（含）
             offset: 偏移量（跳过前 N 条）
             limit: 每页数量
+            asset_type: 资产类型筛选 ('stock'/'fund')，None = 不筛选
             
         Returns:
             Tuple[List[AnalysisHistory], int]: (记录列表, 总数)
@@ -1098,6 +1145,9 @@ class DatabaseManager:
         
         with self.get_session() as session:
             conditions = []
+
+            if asset_type:
+                conditions.append(AnalysisHistory.asset_type == asset_type)
             
             if code:
                 conditions.append(AnalysisHistory.code == code)
@@ -1216,12 +1266,15 @@ class DatabaseManager:
             session.execute(
                 delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(ids))
             )
+            session.execute(
+                delete(FundHoldingsSnapshot).where(FundHoldingsSnapshot.analysis_history_id.in_(ids))
+            )
             result = session.execute(
                 delete(AnalysisHistory).where(AnalysisHistory.id.in_(ids))
             )
             return result.rowcount or 0
 
-    def get_latest_analysis_by_query_id(self, query_id: str) -> Optional[AnalysisHistory]:
+    def get_latest_analysis_by_query_id(self, query_id: str, asset_type: Optional[str] = None) -> Optional[AnalysisHistory]:
         """
         根据 query_id 查询最新一条分析历史记录
 
@@ -1229,14 +1282,18 @@ class DatabaseManager:
 
         Args:
             query_id: 分析记录关联的 query_id
+            asset_type: 资产类型筛选 ('stock'/'fund')，None = 不筛选
 
         Returns:
             AnalysisHistory 对象，不存在返回 None
         """
         with self.get_session() as session:
+            conditions = [AnalysisHistory.query_id == query_id]
+            if asset_type:
+                conditions.append(AnalysisHistory.asset_type == asset_type)
             result = session.execute(
                 select(AnalysisHistory)
-                .where(AnalysisHistory.query_id == query_id)
+                .where(and_(*conditions))
                 .order_by(desc(AnalysisHistory.created_at))
                 .limit(1)
             ).scalars().first()

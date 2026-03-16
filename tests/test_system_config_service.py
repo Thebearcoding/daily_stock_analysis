@@ -213,6 +213,31 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_protocol"], "openai")
         self.assertEqual(payload["resolved_model"], "openai/deepseek-chat")
+        _, kwargs = mock_completion.call_args
+        self.assertEqual(kwargs["temperature"], 0)
+
+    @patch("litellm.completion")
+    def test_test_llm_channel_omits_zero_temperature_for_gpt5_models(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [type("Choice", (), {"message": type("Message", (), {"content": "OK"})()})()],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="primary",
+            protocol="openai",
+            base_url="http://104.236.54.43:8317/v1",
+            api_key="sk-test-value",
+            models=["gpt-5.4"],
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["resolved_model"], "openai/gpt-5.4")
+        _, kwargs = mock_completion.call_args
+        self.assertNotIn("temperature", kwargs)
 
     @patch("src.search_service.reset_search_service")
     def test_update_with_reload_resets_search_service_singleton(self, mock_reset_search_service) -> None:

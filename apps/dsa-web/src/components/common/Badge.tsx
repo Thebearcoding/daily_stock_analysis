@@ -11,21 +11,21 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-slate-700/50 text-gray-300 border-slate-600/50',
-  success: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  warning: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  danger: 'bg-red-500/20 text-red-400 border-red-500/30',
-  info: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  history: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  default: 'bg-warm-surface-alt text-charcoal-muted border-warm-border/50',
+  success: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+  warning: 'bg-amber-50 text-amber-600 border-amber-200',
+  danger: 'bg-red-50 text-red-600 border-red-200',
+  info: 'bg-clay/10 text-clay border-clay/20',
+  history: 'bg-purple/10 text-purple border-purple/20',
 };
 
 const glowStyles: Record<BadgeVariant, string> = {
   default: '',
-  success: 'shadow-emerald-500/20',
-  warning: 'shadow-amber-500/20',
-  danger: 'shadow-red-500/20',
-  info: 'shadow-cyan-500/20',
-  history: 'shadow-purple-500/20',
+  success: 'shadow-emerald-500/10',
+  warning: 'shadow-amber-500/10',
+  danger: 'shadow-red-500/10',
+  info: 'shadow-clay/10',
+  history: 'shadow-purple/10',
 };
 
 /**

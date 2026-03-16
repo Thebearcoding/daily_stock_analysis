@@ -9,9 +9,7 @@ interface HistoryListProps {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  selectedId?: string;
-  onItemClick: (id: string, queryId: string) => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: number) => void;
   selectedId?: number;  // Selected history record ID
   selectedIds: Set<number>;
   isDeleting?: boolean;
@@ -151,7 +149,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
               >
                 <button
                   type="button"
-                  onClick={() => onItemClick(item.id, item.queryId)}
+                  onClick={() => onItemClick(item.id)}
                   className="w-full text-left pr-6"
                 >
                   <div className="flex items-center gap-2 w-full">
@@ -199,7 +197,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(item.id);
+                    onDelete?.(item.id);
                   }}
                   className="absolute right-1 top-1/2 -translate-y-1/2 p-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-danger"
                   title="删除"

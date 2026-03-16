@@ -103,17 +103,18 @@ const SettingsPage: React.FC = () => {
       : rawActiveItems;
 
   return (
-    <div className="min-h-screen px-4 pb-6 pt-4 md:px-6">
-      <header className="mb-4 rounded-2xl border border-white/8 bg-card/80 p-4 backdrop-blur-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen bg-warm-bg text-charcoal font-sans selection:bg-clay/20 selection:text-charcoal flex flex-col pt-6 md:pt-10">
+      <div className="max-w-[1400px] w-full mx-auto flex flex-col gap-6 px-4 md:px-8 pb-12">
+
+        {/* Page Header */}
+        <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-white">系统设置</h1>
-            <p className="text-sm text-secondary">
-              默认使用 .env 中的配置
+            <h1 className="text-2xl md:text-3xl font-serif text-charcoal mb-2 tracking-tight">系统设置</h1>
+            <p className="text-sm text-charcoal-muted max-w-xl">
+              管理运行参数、模型渠道、通知方式与系统级配置。默认值来自 `.env`。
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
             <button type="button" className="btn-secondary" onClick={() => void load()} disabled={isLoading || isSaving}>
               重置
             </button>
@@ -126,117 +127,121 @@ const SettingsPage: React.FC = () => {
               {isSaving ? '保存中...' : `保存配置${dirtyCount ? ` (${dirtyCount})` : ''}`}
             </button>
           </div>
-        </div>
+        </header>
 
         {saveError ? (
           <ApiErrorAlert
-            className="mt-3"
             error={saveError}
             actionLabel={retryAction === 'save' ? '重试保存' : undefined}
             onAction={retryAction === 'save' ? () => void retry() : undefined}
           />
         ) : null}
-      </header>
 
-      {loadError ? (
-        <ApiErrorAlert
-          error={loadError}
-          actionLabel={retryAction === 'load' ? '重试加载' : '重新加载'}
-          onAction={() => void retry()}
-          className="mb-4"
-        />
-      ) : null}
+        {loadError ? (
+          <ApiErrorAlert
+            error={loadError}
+            actionLabel={retryAction === 'load' ? '重试加载' : '重新加载'}
+            onAction={() => void retry()}
+          />
+        ) : null}
 
-      {isLoading ? (
-        <SettingsLoading />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
-          <aside className="rounded-2xl border border-white/8 bg-card/60 p-3 backdrop-blur-sm">
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted">配置分类</p>
-            <div className="space-y-2">
-              {categories.map((category) => {
-                const isActive = category.category === activeCategory;
-                const count = (itemsByCategory[category.category] || []).length;
-                const title = getCategoryTitleZh(category.category, category.title);
-                const description = getCategoryDescriptionZh(category.category, category.description);
+        {isLoading ? (
+          <SettingsLoading />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
+            {/* Sidebar */}
+            <aside className="glass-panel rounded-2xl p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-charcoal-muted">配置分类</p>
+              <div className="space-y-1.5">
+                {categories.map((category) => {
+                  const isActive = category.category === activeCategory;
+                  const count = (itemsByCategory[category.category] || []).length;
+                  const title = getCategoryTitleZh(category.category, category.title);
+                  const description = getCategoryDescriptionZh(category.category, category.description);
 
-                return (
-                  <button
-                    key={category.category}
-                    type="button"
-                    className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-                      isActive
-                        ? 'border-accent bg-cyan/10 text-white'
-                        : 'border-white/8 bg-elevated/40 text-secondary hover:border-white/16 hover:text-white'
-                    }`}
-                    onClick={() => setActiveCategory(category.category)}
-                  >
-                    <span className="flex items-center justify-between text-sm font-medium">
-                      {title}
-                      <span className="text-xs text-muted">{count}</span>
-                    </span>
-                    {description ? <span className="mt-1 block text-xs text-muted">{description}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
+                  return (
+                    <button
+                      key={category.category}
+                      type="button"
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-left transition-all duration-200 ${
+                        isActive
+                          ? 'border-charcoal bg-charcoal text-warm-bg shadow-sm'
+                          : 'border-transparent bg-transparent text-charcoal-muted hover:bg-warm-surface-alt hover:text-charcoal'
+                      }`}
+                      onClick={() => setActiveCategory(category.category)}
+                    >
+                      <span className="flex items-center justify-between text-sm font-medium">
+                        {title}
+                        <span className={`text-xs ${isActive ? 'text-warm-bg/75' : 'text-charcoal-muted'}`}>{count}</span>
+                      </span>
+                      {description ? (
+                        <span className={`mt-0.5 block text-xs leading-relaxed ${isActive ? 'text-warm-bg/70' : 'text-charcoal-muted'}`}>
+                          {description}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
 
-          <section className="space-y-3 rounded-2xl border border-white/8 bg-card/60 p-4 backdrop-blur-sm">
-            {activeCategory === 'base' ? (
-              <div className="space-y-3">
-                <IntelligentImport
-                  stockListValue={
-                    (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
-                  }
+            {/* Content */}
+            <section className="glass-panel rounded-2xl p-5 md:p-6 space-y-4">
+              {activeCategory === 'base' ? (
+                <div className="space-y-4">
+                  <IntelligentImport
+                    stockListValue={
+                      (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
+                    }
+                    configVersion={configVersion}
+                    maskToken={maskToken}
+                    onMerged={() => void load()}
+                    disabled={isSaving || isLoading}
+                  />
+                </div>
+              ) : null}
+              {activeCategory === 'ai_model' ? (
+                <LLMChannelEditor
+                  items={rawActiveItems}
                   configVersion={configVersion}
                   maskToken={maskToken}
-                  onMerged={() => void load()}
+                  onSaved={() => void load()}
                   disabled={isSaving || isLoading}
                 />
-              </div>
-            ) : null}
-            {activeCategory === 'ai_model' ? (
-              <LLMChannelEditor
-                items={rawActiveItems}
-                configVersion={configVersion}
-                maskToken={maskToken}
-                onSaved={() => void load()}
-                disabled={isSaving || isLoading}
-              />
-            ) : null}
-            {activeCategory === 'system' && passwordChangeable ? (
-              <div className="space-y-3">
-                <ChangePasswordCard />
-              </div>
-            ) : null}
-            {activeItems.length ? (
-              activeItems.map((item) => (
-                <SettingsField
-                  key={item.key}
-                  item={item}
-                  value={item.value}
-                  disabled={isSaving}
-                  onChange={setDraftValue}
-                  issues={issueByKey[item.key] || []}
-                />
-              ))
-            ) : (
-              <div className="rounded-xl border border-white/8 bg-elevated/40 p-5 text-sm text-secondary">
-                当前分类下暂无配置项。
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+              ) : null}
+              {activeCategory === 'system' && passwordChangeable ? (
+                <div className="space-y-4">
+                  <ChangePasswordCard />
+                </div>
+              ) : null}
+              {activeItems.length ? (
+                activeItems.map((item) => (
+                  <SettingsField
+                    key={item.key}
+                    item={item}
+                    value={item.value}
+                    disabled={isSaving}
+                    onChange={setDraftValue}
+                    issues={issueByKey[item.key] || []}
+                  />
+                ))
+              ) : (
+                <div className="rounded-xl border border-dashed border-warm-border/60 bg-warm-surface/30 p-8 text-center text-sm text-charcoal-muted">
+                  当前分类下暂无配置项。
+                </div>
+              )}
+            </section>
+          </div>
+        )}
 
-      {toast ? (
-        <div className="fixed bottom-5 right-5 z-50 w-[320px] max-w-[calc(100vw-24px)]">
-          {toast.type === 'success'
-            ? <SettingsAlert title="操作成功" message={toast.message} variant="success" />
-            : <ApiErrorAlert error={toast.error} />}
-        </div>
-      ) : null}
+        {toast ? (
+          <div className="fixed bottom-5 right-5 z-50 w-[320px] max-w-[calc(100vw-24px)]">
+            {toast.type === 'success'
+              ? <SettingsAlert title="操作成功" message={toast.message} variant="success" />
+              : <ApiErrorAlert error={toast.error} />}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

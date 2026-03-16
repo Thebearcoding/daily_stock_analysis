@@ -131,7 +131,7 @@ class StockAnalysisPipeline:
         try:
             # 基金代码在抓取阶段先映射为对应 ETF，避免“分析用ETF但库里只有原基金代码数据”导致策略数据缺失
             fetch_code = code
-            analysis_code, _, mapping_note = resolve_code(code)
+            analysis_code, _, _, mapping_note = resolve_code(code)
             if analysis_code != code:
                 fetch_code = analysis_code
             if mapping_note:
@@ -193,7 +193,7 @@ class StockAnalysisPipeline:
             # Step 0: 基金代码自动映射 - 场外基金自动转换为对应ETF
             original_fund_name = None
             mapping_note = None
-            analysis_code, original_fund_name, mapping_note = resolve_code(code)
+            analysis_code, original_fund_name, _, mapping_note = resolve_code(code)
             if mapping_note:
                 logger.info(f"[基金映射] {mapping_note}")
                 code = analysis_code  # 后续用ETF代码分析

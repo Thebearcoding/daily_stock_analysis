@@ -18,10 +18,10 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
 }) => {
   // 根据涨跌幅获取颜色
   const getPriceChangeColor = (changePct: number | undefined): string => {
-    if (changePct === undefined || changePct === null) return 'text-muted';
+    if (changePct === undefined || changePct === null) return 'text-charcoal-muted';
     if (changePct > 0) return 'text-[#ff4d4d]'; // 红涨
     if (changePct < 0) return 'text-[#00d46a]'; // 绿跌
-    return 'text-muted';
+    return 'text-charcoal-muted';
   };
 
   // 格式化涨跌幅
@@ -42,7 +42,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold text-white">
+                  <h2 className="text-2xl font-bold text-charcoal">
                     {meta.stockName || meta.stockCode}
                   </h2>
                   {/* 价格和涨跌幅 */}
@@ -58,10 +58,10 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   )}
                 </div>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="font-mono text-xs text-cyan bg-cyan/10 px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-xs text-clay bg-clay/10 px-1.5 py-0.5 rounded">
                     {meta.stockCode}
                   </span>
-                  <span className="text-xs text-muted flex items-center gap-1">
+                  <span className="text-xs text-charcoal-muted flex items-center gap-1">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -72,9 +72,9 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
             </div>
 
             {/* 关键结论 */}
-            <div className="border-t border-white/5 pt-4">
+            <div className="border-t border-warm-border/50 pt-4">
               <span className="label-uppercase">KEY INSIGHTS</span>
-              <p className="text-white text-sm leading-relaxed mt-1.5 whitespace-pre-wrap text-left">
+              <p className="text-charcoal text-sm leading-relaxed mt-1.5 whitespace-pre-wrap text-left">
                 {summary.analysisSummary || '暂无分析结论'}
               </p>
             </div>
@@ -92,7 +92,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-medium text-success mb-0.5">操作建议</h4>
-                  <p className="text-white text-sm font-medium">
+                  <p className="text-charcoal text-sm font-medium">
                     {summary.operationAdvice || '暂无建议'}
                   </p>
                 </div>
@@ -109,7 +109,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-medium text-warning mb-0.5">趋势预测</h4>
-                  <p className="text-white text-sm font-medium">
+                  <p className="text-charcoal text-sm font-medium">
                     {summary.trendPrediction || '暂无预测'}
                   </p>
                 </div>
@@ -122,7 +122,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
         <div className="flex flex-col self-stretch min-h-full">
           <Card variant="bordered" padding="md" className="!overflow-visible flex-1 flex flex-col min-h-0">
             <div className="text-center flex-1 flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-white mb-4">Market Sentiment</h3>
+              <h3 className="text-sm font-medium text-charcoal mb-4">Market Sentiment</h3>
               <ScoreGauge score={summary.sentimentScore} size="lg" />
             </div>
           </Card>

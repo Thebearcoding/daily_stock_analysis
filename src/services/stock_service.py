@@ -30,7 +30,9 @@ class StockService:
         self.repo = StockRepository()
 
     @staticmethod
-    def _resolve_analysis_code(stock_code: str) -> Tuple[str, Optional[str], Optional[str]]:
+    def _resolve_analysis_code(
+        stock_code: str,
+    ) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
         """
         统一解析分析代码。
 
@@ -42,7 +44,7 @@ class StockService:
             return resolve_code(stock_code)
         except Exception as e:
             logger.warning(f"基金代码映射失败，回退原始代码 {stock_code}: {e}")
-            return stock_code, None, None
+            return stock_code, None, None, None
 
     @staticmethod
     def _compose_name(
@@ -81,7 +83,7 @@ class StockService:
         Returns:
             实时行情数据字典
         """
-        analysis_code, original_fund_name, mapping_note = self._resolve_analysis_code(stock_code)
+        analysis_code, original_fund_name, analysis_name, mapping_note = self._resolve_analysis_code(stock_code)
 
         try:
             # 调用数据获取器获取实时行情
@@ -102,8 +104,9 @@ class StockService:
 
                 prev_close = previous.close if previous else None
                 change = (latest.close - prev_close) if (latest.close is not None and prev_close is not None) else None
+                actual_name = manager.get_stock_name(analysis_code) or analysis_name
                 name = self._compose_name(
-                    base_name=manager.get_stock_name(analysis_code),
+                    base_name=actual_name,
                     original_fund_name=original_fund_name,
                     analysis_code=analysis_code,
                 )
@@ -137,8 +140,9 @@ class StockService:
 
             # UnifiedRealtimeQuote 是 dataclass，使用 getattr 安全访问字段
             # 在原有行情字段基础上补充策略常用字段
+            actual_name = getattr(quote, "name", None) or analysis_name
             name = self._compose_name(
-                base_name=getattr(quote, "name", None),
+                base_name=actual_name,
                 original_fund_name=original_fund_name,
                 analysis_code=analysis_code,
             )
@@ -206,11 +210,11 @@ class StockService:
                 "weekly/monthly 聚合功能将在后续版本实现。"
             )
         
-        analysis_code, original_fund_name, mapping_note = self._resolve_analysis_code(stock_code)
+        analysis_code, original_fund_name, analysis_name, mapping_note = self._resolve_analysis_code(stock_code)
 
         df = None
         source = None
-        stock_name: Optional[str] = None
+        input_name = original_fund_name
 
         try:
             # 调用数据获取器获取历史数据
@@ -222,12 +226,12 @@ class StockService:
             except Exception as fetch_error:
                 logger.warning(f"获取 {analysis_code} 历史数据失败，尝试数据库回退: {fetch_error}")
 
-            # 场外基金映射场景通常已有原基金名，避免再次请求实时行情取名称导致超时
-            if include_name and original_fund_name is None:
+            # analysis_name 优先来自映射结果；缺失时在显式请求名称或非映射场景下补查
+            if analysis_name is None and (include_name or original_fund_name is None):
                 try:
-                    stock_name = manager.get_stock_name(analysis_code)
+                    analysis_name = manager.get_stock_name(analysis_code)
                 except Exception:
-                    stock_name = None
+                    analysis_name = None
 
         except ImportError:
             logger.warning("DataFetcherManager 未找到，尝试数据库回退")
@@ -282,19 +286,21 @@ class StockService:
                     "volume_ratio": row.volume_ratio,
                 })
             if records:
-                stock_name = stock_name or f"股票{analysis_code}"
+                analysis_name = analysis_name or f"股票{analysis_code}"
             else:
                 logger.warning(f"获取 {analysis_code} 历史数据失败")
 
         stock_name = self._compose_name(
-            base_name=stock_name,
-            original_fund_name=original_fund_name,
+            base_name=analysis_name,
+            original_fund_name=input_name,
             analysis_code=analysis_code,
         )
 
         return {
             "stock_code": stock_code,
             "analysis_code": analysis_code,
+            "analysis_name": analysis_name,
+            "input_name": input_name,
             "mapped_from": stock_code if analysis_code != stock_code else None,
             "mapping_note": mapping_note,
             "stock_name": stock_name,

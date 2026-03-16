@@ -48,7 +48,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <div className="fixed inset-0 overflow-hidden" style={{ zIndex }}>
       {/* 遮罩层 */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300"
+        className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm transition-opacity duration-300"
         onClick={onClose}
       />
 
@@ -56,17 +56,17 @@ export const Drawer: React.FC<DrawerProps> = ({
       <div className={`absolute inset-y-0 right-0 w-full ${width} flex`}>
         <div
           className="relative w-full flex flex-col
-            bg-card border-l border-white/10
+            glass-panel
             shadow-2xl
             transform transition-transform duration-300 ease-out
             animate-slide-in-right"
         >
           {/* 头部 */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-warm-border/50">
             {title && (
               <div>
                 <span className="label-uppercase">DETAIL VIEW</span>
-                <h2 className="text-lg font-semibold text-white mt-1">
+                <h2 className="text-lg font-serif font-semibold text-charcoal mt-1">
                   {title}
                 </h2>
               </div>

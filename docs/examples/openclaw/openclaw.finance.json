@@ -1,0 +1,12 @@
+{
+  "skills": {
+    "entries": {
+      "daily-market-analysis": {
+        "enabled": true,
+        "env": {
+          "DSA_BASE_URL": "http://127.0.0.1:8000"
+        }
+      }
+    }
+  }
+}

@@ -53,16 +53,16 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 20 }) 
       <div className="flex items-center justify-between mb-3">
         <div className="mb-3 flex items-baseline gap-2">
           <span className="label-uppercase">NEWS FEED</span>
-          <h3 className="text-base font-semibold text-white">相关资讯</h3>
+          <h3 className="text-base font-semibold text-charcoal">相关资讯</h3>
         </div>
         <div className="flex items-center gap-2">
           {isLoading && (
-            <div className="w-3.5 h-3.5 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
+            <div className="w-3.5 h-3.5 border-2 border-clay/20 border-t-clay rounded-full animate-spin" />
           )}
           <button
             type="button"
             onClick={fetchNews}
-            className="text-xs text-cyan hover:text-white transition-colors"
+            className="text-xs text-clay hover:text-charcoal transition-colors"
           >
             刷新
           </button>
@@ -78,14 +78,14 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 20 }) 
       )}
 
       {isLoading && !error && (
-        <div className="flex items-center gap-2 text-xs text-secondary">
-          <div className="w-4 h-4 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
+        <div className="flex items-center gap-2 text-xs text-charcoal-muted">
+          <div className="w-4 h-4 border-2 border-clay/20 border-t-clay rounded-full animate-spin" />
           加载资讯中...
         </div>
       )}
 
       {!isLoading && !error && items.length === 0 && (
-        <div className="text-xs text-muted">暂无相关资讯</div>
+        <div className="text-xs text-charcoal-muted">暂无相关资讯</div>
       )}
 
       {!isLoading && !error && items.length > 0 && (
@@ -93,15 +93,15 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 20 }) 
           {items.map((item, index) => (
             <div
               key={`${item.title}-${index}`}
-              className="group p-3 rounded-lg bg-elevated/80 border border-white/5 hover:border-cyan/30 hover:bg-hover transition-colors"
+              className="group p-3 rounded-lg bg-warm-surface-alt border border-warm-border/50 hover:border-clay/30 hover:bg-warm-bg transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm text-white font-medium leading-snug text-left">
+                  <p className="text-sm text-charcoal font-medium leading-snug text-left">
                     {item.title}
                   </p>
                   {item.snippet && (
-                    <p className="text-xs text-secondary mt-1 text-left">
+                    <p className="text-xs text-charcoal-muted mt-1 text-left">
                       {item.snippet}
                     </p>
                   )}
@@ -111,7 +111,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 20 }) 
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-cyan hover:text-white transition-colors inline-flex items-center gap-1 whitespace-nowrap"
+                    className="text-xs text-clay hover:text-charcoal transition-colors inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     跳转
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

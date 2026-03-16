@@ -400,143 +400,162 @@ const HomePage: React.FC = () => {
   );
 
   return (
-    <div
-      className="min-h-screen flex flex-col md:grid overflow-hidden w-full"
-      style={{ gridTemplateColumns: 'minmax(12px, 1fr) 256px 24px minmax(auto, 896px) minmax(12px, 1fr)', gridTemplateRows: 'auto 1fr' }}
-    >
-      {/* Top Input Bar */}
-      <header
-        className="md:col-start-2 md:col-end-5 md:row-start-1 py-3 px-3 md:px-0 border-b border-white/5 flex-shrink-0 flex items-center min-w-0 overflow-hidden"
-      >
-        <div className="flex items-center gap-2 w-full min-w-0 flex-1" style={{ maxWidth: 'min(100%, 1168px)' }}>
-          {/* Mobile hamburger */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/10 transition-colors text-secondary hover:text-white flex-shrink-0"
-            title="历史记录"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex-1 relative min-w-0">
-            <input
-              type="text"
-              value={stockCode}
-              onChange={(e) => {
-                setStockCode(e.target.value.toUpperCase());
-                setInputError(undefined);
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="输入股票代码，如 600519、00700、AAPL"
-              disabled={isAnalyzing}
-              className={`input-terminal w-full ${inputError ? 'border-danger/50' : ''}`}
-            />
-            {inputError && (
-              <p className="absolute -bottom-4 left-0 text-xs text-danger">{inputError}</p>
-            )}
-            {duplicateError && (
-              <p className="absolute -bottom-4 left-0 text-xs text-warning">{duplicateError}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleAnalyze}
-            disabled={!stockCode || isAnalyzing}
-            className="btn-primary flex items-center gap-1.5 whitespace-nowrap flex-shrink-0"
-          >
-            {isAnalyzing ? (
-              <>
-                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                分析中
-              </>
-            ) : (
-              '分析'
-            )}
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-warm-bg text-charcoal font-sans selection:bg-clay/20 selection:text-charcoal flex flex-col pt-6 md:pt-10">
 
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex col-start-2 row-start-2 flex-col gap-3 overflow-hidden min-h-0">
-        {sidebarContent}
+      {/* Header & Input Area */}
+      <div className="max-w-[1400px] w-full mx-auto px-4 md:px-8 mb-6 shrink-0">
+        <header className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-serif text-charcoal mb-2 tracking-tight">股票分析工作台</h1>
+          <p className="text-sm text-charcoal-muted max-w-xl">
+            输入股票代码快速生成分析报告，查看历史记录与AI追问。
+          </p>
+        </header>
+
+        {/* Input toolbar - glass-panel card */}
+        <section className="glass-panel rounded-2xl p-6 flex flex-col gap-4">
+          <div className="flex items-center gap-2 w-full min-w-0">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-warm-surface-alt transition-colors text-charcoal-muted hover:text-charcoal flex-shrink-0"
+              title="历史记录"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="flex-1 relative min-w-0">
+              <input
+                type="text"
+                value={stockCode}
+                onChange={(e) => {
+                  setStockCode(e.target.value.toUpperCase());
+                  setInputError(undefined);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="输入股票代码，如 600519、00700、AAPL"
+                disabled={isAnalyzing}
+                className={`input-terminal w-full ${inputError ? 'border-danger/50' : ''}`}
+              />
+              {inputError && (
+                <p className="absolute -bottom-4 left-0 text-xs text-danger">{inputError}</p>
+              )}
+              {duplicateError && (
+                <p className="absolute -bottom-4 left-0 text-xs text-warning">{duplicateError}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              disabled={!stockCode || isAnalyzing}
+              className="btn-primary flex items-center gap-1.5 whitespace-nowrap flex-shrink-0"
+            >
+              {isAnalyzing ? (
+                <>
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  分析中
+                </>
+              ) : (
+                '分析'
+              )}
+            </button>
+          </div>
+        </section>
+
+        {analysisError ? (
+          <div className="mt-4">
+            <ApiErrorAlert error={analysisError} className="mb-3" />
+          </div>
+        ) : null}
+      </div>
+
+      {/* Main Workspace Area — Split-pane like FundAdvicePage */}
+      <div className="max-w-[1400px] w-full mx-auto px-4 md:px-8 flex flex-col lg:flex-row gap-6 lg:gap-8 pb-12 flex-1 min-h-0">
+
+        {/* Left Column (Report Detail) - Approx 2/3 width */}
+        <div className="flex-1 min-w-0 flex flex-col gap-6">
+          {isLoadingReport ? (
+            <div className="flex-1 min-h-[400px] flex flex-col items-center justify-center">
+              <div className="w-10 h-10 border-3 border-clay/20 border-t-clay rounded-full animate-spin" />
+              <p className="mt-3 text-charcoal-muted text-sm">加载报告中...</p>
+            </div>
+          ) : selectedReport ? (
+            <div className="animate-slide-up">
+              <h3 className="text-xs font-semibold tracking-wider uppercase text-charcoal-muted mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-clay"></span>
+                分析报告
+              </h3>
+              {/* Action buttons */}
+              <div className="flex items-center justify-end mb-2 gap-2">
+                <button
+                  disabled={selectedReport.meta.id === undefined}
+                  onClick={() => {
+                    const code = selectedReport.meta.stockCode;
+                    const name = selectedReport.meta.stockName;
+                    const rid = selectedReport.meta.id!;
+                    navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-clay/5 border border-clay/10 text-clay hover:bg-clay/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  追问 AI
+                </button>
+                <button
+                  disabled={selectedReport.meta.id === undefined}
+                  onClick={() => setShowMarkdownDrawer(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warm-surface-alt border border-warm-border text-charcoal hover:bg-warm-border/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  详细报告
+                </button>
+              </div>
+              <ReportSummary data={selectedReport} isHistory />
+            </div>
+          ) : (
+            <div className="flex-1 min-h-[400px] rounded-2xl border border-dashed border-warm-border/60 bg-warm-surface/30 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+              <div className="w-16 h-16 mb-4 rounded-full glass-panel flex items-center justify-center">
+                <svg className="w-8 h-8 text-charcoal/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-medium text-charcoal mb-1">开始分析</h3>
+              <p className="text-sm text-charcoal-muted max-w-sm">
+                输入股票代码进行分析，或从右侧选择历史报告查看
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column (History & Tasks Rail) - Approx 1/3 width */}
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col gap-3">
+          <h3 className="text-xs font-semibold tracking-wider uppercase text-charcoal-muted flex items-center justify-between">
+            <span>任务与历史</span>
+          </h3>
+          <div className="glass-panel rounded-2xl p-2">
+            {sidebarContent}
+          </div>
+        </div>
       </div>
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setSidebarOpen(false)}>
-          <div className="absolute inset-0 bg-black/60" />
+          <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm" />
           <div
-            className="absolute left-0 top-0 bottom-0 w-72 flex flex-col glass-card overflow-hidden border-r border-white/10 shadow-2xl p-3"
+            className="absolute left-0 top-0 bottom-0 w-72 flex flex-col glass-panel overflow-hidden border-r-0 shadow-2xl p-3 animate-slide-in-right"
             onClick={(e) => e.stopPropagation()}
           >
             {sidebarContent}
           </div>
         </div>
       )}
-
-      {/* Right Report Detail */}
-      <section className="md:col-start-4 md:row-start-2 flex-1 overflow-y-auto overflow-x-auto px-3 md:px-0 md:pl-1 min-w-0 min-h-0">
-        {analysisError ? (
-          <ApiErrorAlert
-            error={analysisError}
-            className="mb-3"
-          />
-        ) : null}
-        {isLoadingReport ? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="w-10 h-10 border-3 border-cyan/20 border-t-cyan rounded-full animate-spin" />
-            <p className="mt-3 text-secondary text-sm">加载报告中...</p>
-          </div>
-        ) : selectedReport ? (
-          <div className="max-w-4xl">
-            {/* Action buttons */}
-            <div className="flex items-center justify-end mb-2 gap-2">
-              <button
-                disabled={selectedReport.meta.id === undefined}
-                onClick={() => {
-                  const code = selectedReport.meta.stockCode;
-                  const name = selectedReport.meta.stockName;
-                  const rid = selectedReport.meta.id!;
-                  navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan/10 border border-cyan/20 text-cyan text-sm hover:bg-cyan/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                追问 AI
-              </button>
-              <button
-                disabled={selectedReport.meta.id === undefined}
-                onClick={() => setShowMarkdownDrawer(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple/10 border border-purple/20 text-purple text-sm hover:bg-purple/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                详细报告
-              </button>
-            </div>
-            <ReportSummary data={selectedReport} isHistory />
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-12 h-12 mb-3 rounded-xl bg-elevated flex items-center justify-center">
-              <svg className="w-6 h-6 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-medium text-white mb-1.5">开始分析</h3>
-            <p className="text-xs text-muted max-w-xs">
-              输入股票代码进行分析，或从左侧选择历史报告查看
-            </p>
-          </div>
-        )}
-      </section>
 
       {/* Markdown Report Drawer */}
       {showMarkdownDrawer && selectedReport && selectedReport.meta.id && (

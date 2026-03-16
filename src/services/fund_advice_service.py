@@ -17,8 +17,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from src.notification import NotificationService
 from src.services.analysis_service import AnalysisService
 from src.services.stock_service import StockService
+from src.services.fund_holdings_summary_service import FundHoldingsSummaryService
+from src.services.fund_nav_service import FundNavService
+from src.fund_nav_analyzer import FundNavAnalyzer, FundNavAnalysisResult
+from src.services.fund_mapping import is_otc_fund_code, resolve_code
 from src.storage import DatabaseManager
 from src.stock_analyzer import (
     BuySignal,
@@ -44,10 +49,18 @@ class FundAdviceService:
         stock_service: Optional[StockService] = None,
         analyzer: Optional[StockTrendAnalyzer] = None,
         analysis_service: Optional[AnalysisService] = None,
+        nav_service: Optional[FundNavService] = None,
+        nav_analyzer: Optional[FundNavAnalyzer] = None,
+        holdings_summary_service: Optional[FundHoldingsSummaryService] = None,
+        notifier: Optional[NotificationService] = None,
     ):
         self.stock_service = stock_service or StockService()
         self.analyzer = analyzer or StockTrendAnalyzer()
         self.analysis_service = analysis_service or AnalysisService()
+        self.nav_service = nav_service or FundNavService()
+        self.nav_analyzer = nav_analyzer or FundNavAnalyzer()
+        self.holdings_summary_service = holdings_summary_service or FundHoldingsSummaryService()
+        self.notifier = notifier
 
     @staticmethod
     def _safe_float(value: Any, digits: int = 4) -> float:
@@ -297,6 +310,8 @@ class FundAdviceService:
         return {
             "fund_code": fund_code,
             "analysis_code": history.get("analysis_code") or fund_code,
+            "analysis_name": history.get("analysis_name"),
+            "input_name": history.get("input_name") or history.get("stock_name"),
             "mapped_from": history.get("mapped_from"),
             "mapping_note": history.get("mapping_note"),
             "fund_name": history.get("stock_name"),
@@ -469,13 +484,62 @@ class FundAdviceService:
         advice["deep_analysis"] = None
 
         if normalized_mode == self.DEEP_MODE:
-            advice["deep_analysis"] = self._build_deep_analysis(fund_code=fund_code)
+            # NAV path 的 deep 模式做兼容降级：基于 fast 结果生成轻量摘要
+            if advice.get("analysis_path") == "fund_nav":
+                advice["deep_analysis"] = self._build_nav_deep_fallback(advice)
+            else:
+                advice["deep_analysis"] = self._build_deep_analysis(fund_code=fund_code)
 
         return advice
+
+    def _build_nav_deep_fallback(self, advice: Dict[str, Any]) -> Dict[str, Any]:
+        """NAV path 的 deep 分析兼容降级：基于 fast 结果生成摘要。"""
+        reasons = advice.get("reasons") or []
+        risks = advice.get("risk_factors") or []
+        nav_metrics = advice.get("nav_metrics") or {}
+
+        summary_parts = []
+        if advice.get("action_label"):
+            summary_parts.append(f"操作建议：{advice['action_label']}")
+        if nav_metrics.get("return_20d") is not None:
+            summary_parts.append(f"近20日收益 {nav_metrics['return_20d']:+.1f}%")
+        if nav_metrics.get("max_drawdown_120d") is not None:
+            summary_parts.append(f"近期最大回撤 {nav_metrics['max_drawdown_120d']:.1f}%")
+
+        analysis_summary = "；".join(summary_parts) if summary_parts else "基金净值分析摘要"
+        operation_advice = advice.get("action_label") or advice.get("action")
+
+        return {
+            "requested": True,
+            "status": "completed",
+            "source": "fund_nav_analysis",
+            "report_type": "fund_nav_summary",
+            "stock_code": advice.get("fund_code"),
+            "stock_name": advice.get("fund_name"),
+            "summary": {
+                "analysis_summary": analysis_summary,
+                "operation_advice": operation_advice,
+                "trend_prediction": advice.get("trend_status"),
+                "sentiment_score": advice.get("confidence_score"),
+                "sentiment_label": advice.get("confidence_level"),
+            },
+            "strategy": advice.get("strategy") or {},
+            "details": {
+                "news_summary": None,
+                "technical_analysis": "; ".join(reasons[:3]) if reasons else None,
+                "fundamental_analysis": None,
+                "risk_warning": "; ".join(risks[:3]) if risks else None,
+            },
+            "error": None,
+        }
 
     def get_advice(self, fund_code: str, days: int = 120, mode: str = FAST_MODE) -> Optional[Dict[str, Any]]:
         """
         获取基金建议。
+
+        使用显式路由：
+        - OTC 基金且未映射 ETF -> NAV path（基金净值分析）
+        - 其他（ETF/mapped ETF/股票）-> ETF technical path（复用股票趋势分析）
 
         Args:
             fund_code: 基金代码（支持场外基金自动映射）
@@ -485,6 +549,31 @@ class FundAdviceService:
         Returns:
             建议结果字典，无数据时返回 None
         """
+        # 显式路由：先 resolve_code，再判断走哪条路径
+        analysis_code, original_fund_name, analysis_name, mapping_note = resolve_code(fund_code)
+
+        # 路由条件：OTC 基金 + 未映射（analysis_code == fund_code）→ NAV path
+        if is_otc_fund_code(fund_code) and analysis_code == fund_code:
+            logger.info(f"[FundAdvice] {fund_code} 走 NAV path（未映射 ETF 的主动基金）")
+            return self._get_advice_via_nav_path(
+                fund_code,
+                days,
+                mode,
+                fund_name=original_fund_name,
+                analysis_name=analysis_name,
+                mapping_note=mapping_note,
+            )
+
+        # 其他情况走 ETF technical path
+        logger.info(f"[FundAdvice] {fund_code} 走 ETF technical path (analysis_code={analysis_code})")
+        return self._get_advice_via_etf_path(fund_code, days, mode)
+
+    # ── ETF Technical Path（不改动现有逻辑）──
+
+    def _get_advice_via_etf_path(
+        self, fund_code: str, days: int, mode: str
+    ) -> Optional[Dict[str, Any]]:
+        """走现有 StockService + StockTrendAnalyzer 链路。"""
         target_days = max(days, self.MIN_ANALYSIS_DAYS)
 
         try:
@@ -576,6 +665,409 @@ class FundAdviceService:
             fund_code=fund_code,
         )
 
+    # ── Fund NAV Path（新增）──
+
+    def _get_advice_via_nav_path(
+        self,
+        fund_code: str,
+        days: int,
+        mode: str,
+        fund_name: Optional[str] = None,
+        analysis_name: Optional[str] = None,
+        mapping_note: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        主动基金 / unmapped OTC 基金的独立净值分析路径。
+        不依赖 StockService，直接通过 FundNavService 获取净值数据。
+        """
+        target_days = max(days, self.MIN_ANALYSIS_DAYS)
+
+        try:
+            history = self.nav_service.get_nav_history(
+                fund_code=fund_code,
+                days=target_days,
+                fund_name=fund_name,
+                analysis_name=analysis_name,
+            )
+        except Exception as e:
+            logger.error(f"[NAV path] 获取 {fund_code} 净值历史失败: {e}", exc_info=True)
+            return None
+
+        raw_rows = history.get("data") or []
+        df = self._normalize_history_dataframe(raw_rows)
+
+        if df.empty:
+            logger.warning(f"[NAV path] {fund_code} 净值数据为空")
+            return None
+
+        if len(df) < 10:
+            logger.warning(f"[NAV path] {fund_code} 净值数据仅 {len(df)} 条，返回低置信兜底")
+            low_data = self._build_low_data_advice(fund_code, history, df)
+            return self._attach_analysis_mode(low_data, mode, fund_code)
+
+        # 使用 FundNavAnalyzer 分析净值序列
+        nav_result = self.nav_analyzer.analyze(df, fund_code)
+        holdings_summary = self._get_holdings_summary(
+            fund_code=fund_code,
+            analysis_code=history.get("analysis_code") or fund_code,
+            analysis_name=history.get("analysis_name"),
+            fund_name=history.get("fund_name") or history.get("input_name") or history.get("stock_name"),
+        )
+
+        # 组装 advice（与 ETF path 输出格式对齐）
+        action, action_label = self._derive_nav_action(nav_result)
+        confidence_score, confidence_level = self._derive_nav_confidence(nav_result, action)
+        strategy = self._build_nav_strategy(nav_result, action)
+        rule_assessment = self._build_nav_rule_assessment(df, nav_result)
+
+        latest_date = df.iloc[-1]["date"].strftime("%Y-%m-%d")
+
+        advice = self._build_base_advice(fund_code, history, latest_date)
+        advice.update({
+            "action": action,
+            "action_label": action_label,
+            "confidence_level": confidence_level,
+            "confidence_score": confidence_score,
+            "trend_status": nav_result.trend_status,
+            "buy_signal": nav_result.buy_signal,
+            "signal_score": nav_result.signal_score,
+            "current_price": self._safe_float(nav_result.current_nav),
+            "ma5": self._safe_float(nav_result.ma5),
+            "ma10": self._safe_float(nav_result.ma10),
+            "ma20": self._safe_float(nav_result.ma20),
+            "ma60": self._safe_float(nav_result.ma60),
+            "volume_status": "场外基金无量能数据",
+            "volume_ratio_5d": 0.0,
+            "macd": {
+                "dif": self._safe_float(nav_result.macd_dif),
+                "dea": self._safe_float(nav_result.macd_dea),
+                "bar": self._safe_float(nav_result.macd_bar),
+                "status": nav_result.macd_status,
+                "signal": nav_result.macd_signal,
+            },
+            "rsi": {
+                "rsi6": self._safe_float(nav_result.rsi_6, digits=2),
+                "rsi12": self._safe_float(nav_result.rsi_12, digits=2),
+                "rsi24": self._safe_float(nav_result.rsi_24, digits=2),
+                "status": nav_result.rsi_status,
+                "signal": nav_result.rsi_signal,
+            },
+            "rule_assessment": rule_assessment,
+            "strategy": strategy,
+            "reasons": list(dict.fromkeys(nav_result.signal_reasons or [])),
+            "risk_factors": list(dict.fromkeys(nav_result.risk_factors or [])),
+            "nav_metrics": {
+                "return_20d": nav_result.return_20d,
+                "return_60d": nav_result.return_60d,
+                "return_120d": nav_result.return_120d,
+                "volatility_20d": nav_result.volatility_20d,
+                "max_drawdown_120d": nav_result.max_drawdown_120d,
+            },
+            "analysis_path": "fund_nav",
+            "generated_at": datetime.now().isoformat(),
+        })
+        if mapping_note:
+            advice["mapping_note"] = mapping_note
+
+        advice = self._apply_holdings_enhancement(
+            advice=advice,
+            holdings_summary=holdings_summary,
+        )
+
+        return self._attach_analysis_mode(
+            advice=advice,
+            mode=mode,
+            fund_code=fund_code,
+        )
+
+    # ── NAV path 辅助方法 ──
+
+    @staticmethod
+    def _derive_nav_action(result: FundNavAnalysisResult) -> Tuple[str, str]:
+        """基于 NAV 分析结果给出操作动作。"""
+        score = result.signal_score
+        trend = result.trend_status
+
+        # 净值站上 MA20/MA60 + 中期收益转正 → 买入
+        nav_above_ma20 = result.current_nav > result.ma20 > 0
+        nav_above_ma60 = result.current_nav > result.ma60 > 0
+        mid_return_positive = result.return_60d > 0
+
+        if nav_above_ma20 and nav_above_ma60 and mid_return_positive and score >= 55:
+            return "buy", "逢低布局"
+
+        if nav_above_ma20 and trend in ("多头排列", "弱势多头") and score >= 45:
+            return "hold", "持有观察"
+
+        # 趋势弱 + 回撤大 → 防守
+        if result.max_drawdown_120d < -10 and trend in ("空头排列", "弱势空头"):
+            return "reduce", "减仓风控"
+
+        if trend in ("空头排列",) and score < 30:
+            return "reduce", "减仓风控"
+
+        if trend in ("弱势空头", "盘整") or score < 45:
+            return "wait", "防守观望"
+
+        return "hold", "持有观察"
+
+    @staticmethod
+    def _derive_nav_confidence(
+        result: FundNavAnalysisResult, action: str
+    ) -> Tuple[int, str]:
+        """基于 NAV 分析结果生成置信度。"""
+        score = result.signal_score
+
+        # NAV path 天然精度低于 ETF path，整体降 5 分
+        adjusted = max(0, min(100, score - 5))
+
+        if adjusted >= 70:
+            level = "高"
+        elif adjusted >= 50:
+            level = "中"
+        else:
+            level = "低"
+
+        return adjusted, level
+
+    def _build_nav_strategy(
+        self, result: FundNavAnalysisResult, action: str
+    ) -> Dict[str, Any]:
+        """基于净值构建策略建议。"""
+        nav = result.current_nav
+        ma20 = result.ma20 if result.ma20 > 0 else nav
+        ma10 = result.ma10 if result.ma10 > 0 else nav
+        ma5 = result.ma5 if result.ma5 > 0 else nav
+
+        buy_low = self._safe_float(min(ma10, ma20))
+        buy_high = self._safe_float(min(ma5, nav * 1.005))
+        if buy_low > buy_high:
+            buy_low, buy_high = buy_high, buy_low
+
+        add_center = ma20
+        add_low = self._safe_float(add_center * 0.995)
+        add_high = self._safe_float(add_center * 1.005)
+
+        stop_loss = self._safe_float(min(ma10, ma20) * 0.97)
+        take_profit = self._safe_float(nav * 1.08)
+
+        position_text = {
+            "buy": "试探仓位 20%-30%，站稳 MA20 后逐步加仓",
+            "hold": "维持当前仓位，回踩 MA10 不破可小幅补仓",
+            "wait": "空仓或轻仓等待，优先观察净值站上 MA20 + MACD 金叉",
+            "reduce": "减仓至防守仓位，若净值跌破 MA20 继续降仓",
+        }.get(action, "控制仓位，等待明确信号")
+
+        return {
+            "buy_zone": {
+                "low": buy_low,
+                "high": buy_high,
+                "description": "基于 MA10~MA20 区域分批低吸",
+            },
+            "add_zone": {
+                "low": add_low,
+                "high": add_high,
+                "description": "确认趋势延续后在 MA20 附近加仓",
+            },
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "position_advice": position_text,
+        }
+
+    def _build_nav_rule_assessment(
+        self, df: pd.DataFrame, result: FundNavAnalysisResult
+    ) -> Dict[str, Any]:
+        """基于净值 MACD 做规则评估（保持字段结构与 ETF path 一致）。"""
+        if df.empty or len(df) < 3:
+            return self._default_rule_assessment()
+
+        close = pd.to_numeric(df["close"], errors="coerce").ffill().bfill()
+        ema_fast = close.ewm(span=12, adjust=False).mean()
+        ema_slow = close.ewm(span=26, adjust=False).mean()
+        dif = ema_fast - ema_slow
+        dea = dif.ewm(span=9, adjust=False).mean()
+        bar = (dif - dea) * 2
+
+        bars = bar.tail(3).tolist()
+        if len(bars) < 3:
+            return self._default_rule_assessment()
+
+        b1, b2, b3 = bars[0], bars[1], bars[2]
+        bearish_shrinking = b1 < b2 < b3 < 0
+        bullish_fading = b1 > b2 > b3 > 0
+
+        entry_ready = bearish_shrinking and result.macd_status in (
+            "零轴上金叉", "金叉",
+        )
+        exit_triggered = bullish_fading and result.macd_status in (
+            "死叉",
+        )
+
+        if entry_ready:
+            comment = "MACD柱体前大后小且金叉，净值入场条件成立"
+        elif exit_triggered:
+            comment = "MACD柱体前高后低且转弱，减仓条件成立"
+        elif bearish_shrinking:
+            comment = "MACD空头动能衰减，等待净值金叉确认"
+        elif bullish_fading:
+            comment = "MACD多头动能衰减，关注净值回调风险"
+        else:
+            comment = "规则条件暂未满足，继续观察"
+
+        return {
+            "entry_rule": "前大后小，金叉就搞",
+            "exit_rule": "前高后低，转弱就跑",
+            "entry_ready": bool(entry_ready),
+            "exit_triggered": bool(exit_triggered),
+            "comment": comment,
+        }
+
+    @staticmethod
+    def _confidence_level_from_score(score: int) -> str:
+        """根据分数回推置信度等级。"""
+        if score >= 75:
+            return "高"
+        if score >= 55:
+            return "中"
+        return "低"
+
+    def _get_holdings_summary(
+        self,
+        fund_code: str,
+        analysis_code: Optional[str] = None,
+        analysis_name: Optional[str] = None,
+        fund_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """获取主动基金的持仓摘要，失败时 fail-open。"""
+        try:
+            return self.holdings_summary_service.get_summary_for_target(
+                fund_code=fund_code,
+                analysis_code=analysis_code,
+                fund_name=fund_name,
+                analysis_name=analysis_name,
+            )
+        except Exception as exc:
+            logger.warning(f"[HoldingsSummary] {fund_code} 持仓摘要生成失败: {exc}")
+            return self.holdings_summary_service._build_unavailable_summary()
+
+    def _apply_holdings_enhancement(
+        self,
+        advice: Dict[str, Any],
+        holdings_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        使用披露持仓摘要增强 NAV path 的建议。
+
+        设计原则：
+        - NAV 技术面是主干，持仓仅做辅助增强
+        - 不让 holdings 一票否决 action
+        - 优先增强 confidence / reasons / risk_factors / position_advice / rule comment
+        """
+        advice["analysis_context"] = {
+            "analysis_path": advice.get("analysis_path"),
+            "holdings_summary": holdings_summary,
+        }
+
+        if not holdings_summary or holdings_summary.get("source_type") == "unavailable":
+            return advice
+
+        reasons = list(advice.get("reasons") or [])
+        risks = list(advice.get("risk_factors") or [])
+        strategy = dict(advice.get("strategy") or {})
+        rule_assessment = dict(advice.get("rule_assessment") or {})
+
+        for reason in holdings_summary.get("holdings_reasons") or []:
+            reasons.append(reason)
+        for risk in holdings_summary.get("holdings_risks") or []:
+            risks.append(risk)
+
+        confidence_score = int(advice.get("confidence_score") or 0)
+        holdings_signal = holdings_summary.get("holdings_signal")
+        dominant_themes = holdings_summary.get("dominant_themes") or []
+
+        if holdings_signal == "bullish":
+            confidence_score = min(100, confidence_score + 5)
+            if dominant_themes:
+                position_note = f"披露持仓主题聚焦 {'、'.join(dominant_themes[:2])}，回撤时可优先观察相关主线延续。"
+            else:
+                position_note = "披露持仓结构相对清晰，可结合净值趋势做低吸跟踪。"
+        elif holdings_signal == "cautious":
+            confidence_score = max(0, confidence_score - 6)
+            position_note = "披露持仓集中度偏高，若主线转弱需比纯净值策略更快收缩仓位。"
+        else:
+            position_note = "披露持仓可作为净值趋势的辅助验证，重点观察主线是否持续。"
+
+        advice["confidence_score"] = confidence_score
+        advice["confidence_level"] = self._confidence_level_from_score(confidence_score)
+        advice["reasons"] = list(dict.fromkeys(reasons))
+        advice["risk_factors"] = list(dict.fromkeys(risks))
+
+        if strategy:
+            base_position = strategy.get("position_advice") or ""
+            strategy["position_advice"] = (
+                f"{base_position}；{position_note}" if base_position else position_note
+            )
+            advice["strategy"] = strategy
+
+        if rule_assessment:
+            comment = rule_assessment.get("comment") or ""
+            rule_suffix = (
+                f"披露持仓显示主题偏向 {'、'.join(dominant_themes[:2])}。"
+                if dominant_themes else
+                "披露持仓主题分布未形成单一强主线。"
+            )
+            rule_assessment["comment"] = (
+                f"{comment} {rule_suffix}".strip() if comment else rule_suffix
+            )
+            advice["rule_assessment"] = rule_assessment
+
+        return advice
+
+    def _get_notifier(self) -> NotificationService:
+        """延迟初始化通知服务，便于测试注入。"""
+        if self.notifier is None:
+            self.notifier = NotificationService()
+        return self.notifier
+
+    def _send_fund_notification(
+        self,
+        advice: Dict[str, Any],
+        *,
+        record_id: Optional[int] = None,
+    ) -> None:
+        """
+        使用既有通知渠道发送基金分析摘要。
+
+        该步骤是 fail-open 的：发送失败只记录日志，不影响主分析链路。
+        """
+        try:
+            notifier = self._get_notifier()
+            if not notifier.is_available():
+                logger.info("[FundNotify] 未配置通知渠道，跳过基金结果推送")
+                return
+
+            report = notifier.generate_fund_advice_report(advice, record_id=record_id)
+            success = notifier.send(report)
+            if success:
+                logger.info(
+                    "[FundNotify] 基金分析通知发送成功: %s (record_id=%s)",
+                    advice.get("fund_code"),
+                    record_id,
+                )
+            else:
+                logger.warning(
+                    "[FundNotify] 基金分析通知发送失败: %s (record_id=%s)",
+                    advice.get("fund_code"),
+                    record_id,
+                )
+        except Exception as exc:
+            logger.error(
+                "[FundNotify] 基金分析通知异常但不影响主链路: %s, fund=%s, record_id=%s",
+                exc,
+                advice.get("fund_code"),
+                record_id,
+            )
+
     # ── Phase 2B: 基金持久化单 owner 入口 ──
 
     def analyze_and_persist(
@@ -611,7 +1103,8 @@ class FundAdviceService:
 
         # Step 2: 构建基金专用 raw_result 快照
         analysis_code = advice.get("analysis_code") or fund_code
-        analysis_name = advice.get("analysis_name") or advice.get("fund_name")
+        analysis_name = advice.get("analysis_name")  # 实际 ETF/股票名，不用 fund_name 兑底
+        input_name = advice.get("input_name") or advice.get("fund_name")
         analysis_mode = advice.get("analysis_mode") or mode
 
         raw_result = {
@@ -619,10 +1112,11 @@ class FundAdviceService:
             "analysis_kind": "fund_advice",
             "analysis_mode": analysis_mode,
             "input_code": advice.get("fund_code") or fund_code,
-            "input_name": advice.get("fund_name"),
+            "input_name": input_name,
             "analysis_code": analysis_code,
             "analysis_name": analysis_name,
             "mapping_note": advice.get("mapping_note"),
+            "analysis_context": advice.get("analysis_context"),
             "advice": {
                 "action": advice.get("action"),
                 "action_label": advice.get("action_label"),
@@ -664,7 +1158,7 @@ class FundAdviceService:
         record_id = db.save_fund_advice_history(
             query_id=query_id,
             fund_code=advice.get("fund_code") or fund_code,
-            fund_name=advice.get("fund_name"),
+            fund_name=input_name,
             analysis_code=analysis_code,
             analysis_name=analysis_name,
             analysis_mode=analysis_mode,
@@ -677,7 +1171,7 @@ class FundAdviceService:
             logger.error(f"[{fund_code}] analyze_and_persist: 保存历史失败")
             return None
 
-        return {
+        result = {
             "record_id": record_id,
             "query_id": query_id,
             "fund_code": advice.get("fund_code") or fund_code,
@@ -686,3 +1180,5 @@ class FundAdviceService:
             "action": operation_advice,
             "advice": advice,
         }
+        self._send_fund_notification(advice, record_id=record_id)
+        return result

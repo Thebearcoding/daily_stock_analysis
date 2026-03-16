@@ -23,8 +23,8 @@ const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onCli
       className={`
         min-w-[40px] h-10 px-3 rounded-lg font-medium
         transition-all duration-200
-        hover:bg-hover hover:text-white border border-white/5
-        ${isActive ? 'bg-cyan text-muted' : 'bg-elevated text-secondary'}
+        hover:bg-warm-surface-alt hover:text-charcoal border border-warm-border/50
+        ${isActive ? 'bg-charcoal text-white' : 'bg-warm-surface text-charcoal-muted'}
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >

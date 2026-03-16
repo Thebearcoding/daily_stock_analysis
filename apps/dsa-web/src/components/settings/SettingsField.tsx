@@ -78,7 +78,7 @@ function renderFieldControl(
           disabled={disabled || !schema?.isEditable}
           onChange={(event) => onChange(event.target.checked ? 'true' : 'false')}
         />
-        <span className="text-sm text-secondary">{checked ? '已启用' : '未启用'}</span>
+        <span className="text-sm text-charcoal-muted">{checked ? '已启用' : '未启用'}</span>
       </label>
     );
   }
@@ -196,9 +196,9 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
   const [isPasswordEditable, setIsPasswordEditable] = useState(false);
 
   return (
-    <div className={`rounded-xl border p-4 ${hasError ? 'border-red-500/35' : 'border-white/8'} bg-elevated/50`}>
+    <div className={`rounded-xl border p-4 ${hasError ? 'border-red-500/35 bg-red-50/30' : 'border-warm-border/50 bg-warm-surface/50'}`}>
       <div className="mb-2 flex items-center gap-2">
-        <label className="text-sm font-semibold text-white" htmlFor={`setting-${item.key}`}>
+        <label className="text-sm font-semibold text-charcoal" htmlFor={`setting-${item.key}`}>
           {title}
         </label>
         {schema?.isSensitive ? (
@@ -207,7 +207,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
       </div>
 
       {description ? (
-        <p className="mb-3 text-xs text-muted" title={description}>
+        <p className="mb-3 text-xs text-charcoal-muted" title={description}>
           {description}
         </p>
       ) : null}
@@ -226,7 +226,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
       </div>
 
       {schema?.isSensitive ? (
-        <p className="mt-2 text-[11px] text-secondary">
+        <p className="mt-2 text-[11px] text-charcoal-muted">
           密钥默认隐藏，可点击眼睛图标查看明文。
           {isMultiValue ? ' 支持添加多个输入框进行增删。' : ''}
         </p>

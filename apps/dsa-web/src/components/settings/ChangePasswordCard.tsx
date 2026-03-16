@@ -61,17 +61,17 @@ export const ChangePasswordCard: React.FC = () => {
   };
 
   return (
-    <div className="rounded-xl border border-white/8 bg-elevated/50 p-4">
+    <div className="rounded-xl border border-warm-border bg-warm-bg/70 p-4">
       <div className="mb-2 flex items-center gap-2">
-        <label className="text-sm font-semibold text-white">修改密码</label>
+        <label className="text-sm font-semibold text-charcoal">修改密码</label>
       </div>
-      <p className="mb-3 text-xs text-muted">修改管理员登录密码</p>
+      <p className="mb-3 text-xs text-charcoal-muted">修改管理员登录密码</p>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label
             htmlFor="change-pass-current"
-            className="mb-1 block text-xs font-medium text-secondary"
+            className="mb-1 block text-xs font-medium text-charcoal-muted"
           >
             当前密码
           </label>
@@ -101,7 +101,7 @@ export const ChangePasswordCard: React.FC = () => {
         <div>
           <label
             htmlFor="change-pass-new"
-            className="mb-1 block text-xs font-medium text-secondary"
+            className="mb-1 block text-xs font-medium text-charcoal-muted"
           >
             新密码
           </label>
@@ -131,7 +131,7 @@ export const ChangePasswordCard: React.FC = () => {
         <div>
           <label
             htmlFor="change-pass-confirm"
-            className="mb-1 block text-xs font-medium text-secondary"
+            className="mb-1 block text-xs font-medium text-charcoal-muted"
           >
             确认新密码
           </label>
@@ -165,7 +165,7 @@ export const ChangePasswordCard: React.FC = () => {
             : <SettingsAlert title="修改失败" message={error} variant="error" className="!mt-3" />
           : null}
         {success ? (
-          <p className="text-xs text-green-500">密码已修改成功</p>
+          <p className="text-xs text-emerald-700">密码已修改成功</p>
         ) : null}
 
         <button

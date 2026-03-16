@@ -90,7 +90,7 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
     <div className={`flex flex-col items-center ${className}`}>
       {/* 标题 */}
       {showLabel && (
-        <span className="label-uppercase mb-3 text-secondary">
+        <span className="label-uppercase mb-3 text-charcoal-muted">
           恐惧贪婪指数
         </span>
       )}
@@ -125,7 +125,7 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
             cy={width / 2}
             r={radius}
             fill="none"
-            stroke="rgba(255, 255, 255, 0.05)"
+            stroke="rgba(0, 0, 0, 0.05)"
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${arcLength} ${circumference}`}
@@ -164,9 +164,9 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
         {/* 中心数值 */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className={`font-bold ${fontSize} text-white`}
+            className={`font-bold ${fontSize} text-charcoal`}
             style={{ 
-              textShadow: `0 0 30px ${glowColor}`,
+              textShadow: `0 0 20px ${glowColor}`,
             }}
           >
             {displayScore}

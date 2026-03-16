@@ -267,16 +267,19 @@ def get_task_list(
     """
     task_queue = get_task_queue()
     
-    # 获取所有任务
-    all_tasks = task_queue.list_all_tasks(limit=limit)
+    # 获取所有任务并过滤为 stock-only
+    all_tasks = task_queue.list_all_tasks(limit=100)
+    stock_tasks = [t for t in all_tasks if getattr(t, "asset_type", "stock") == "stock"]
     
     # 状态筛选
     if status:
         status_list = [s.strip().lower() for s in status.split(",")]
-        all_tasks = [t for t in all_tasks if t.status.value in status_list]
+        stock_tasks = [t for t in stock_tasks if t.status.value in status_list]
     
-    # 统计信息
-    stats = task_queue.get_task_stats()
+    # 基于 stock_tasks 统计
+    all_stock = [t for t in task_queue.list_all_tasks(limit=200) if getattr(t, "asset_type", "stock") == "stock"]
+    stats_pending = sum(1 for t in all_stock if t.status.value == "pending")
+    stats_processing = sum(1 for t in all_stock if t.status.value == "processing")
     
     # 转换为 Schema
     task_infos = [
@@ -293,13 +296,13 @@ def get_task_list(
             completed_at=t.completed_at.isoformat() if t.completed_at else None,
             error=t.error,
         )
-        for t in all_tasks
+        for t in stock_tasks[:limit]
     ]
     
     return TaskListResponse(
-        total=stats["total"],
-        pending=stats["pending"],
-        processing=stats["processing"],
+        total=len(all_stock),
+        pending=stats_pending,
+        processing=stats_processing,
         tasks=task_infos,
     )
 
@@ -338,10 +341,11 @@ async def task_stream():
         # 发送连接成功事件
         yield _format_sse_event("connected", {"message": "Connected to task stream"})
         
-        # 发送当前进行中的任务
+        # 发送当前进行中的 stock 任务
         pending_tasks = task_queue.list_pending_tasks()
         for task in pending_tasks:
-            yield _format_sse_event("task_created", task.to_dict())
+            if getattr(task, "asset_type", "stock") == "stock":
+                yield _format_sse_event("task_created", task.to_dict())
         
         # 订阅任务事件
         task_queue.subscribe(event_queue)
@@ -349,9 +353,10 @@ async def task_stream():
         try:
             while True:
                 try:
-                    # 等待事件，超时发送心跳
                     event = await asyncio.wait_for(event_queue.get(), timeout=30)
-                    yield _format_sse_event(event["type"], event["data"])
+                    # 只转发 stock 类型事件
+                    if event.get("data", {}).get("asset_type", "stock") == "stock":
+                        yield _format_sse_event(event["type"], event["data"])
                 except asyncio.TimeoutError:
                     # 心跳
                     yield _format_sse_event("heartbeat", {
@@ -417,11 +422,11 @@ def get_analysis_status(task_id: str) -> TaskStatus:
     Raises:
         HTTPException: 404 - 任务不存在
     """
-    # 1. 先从任务队列查询
+    # 1. 先从任务队列查询（stock-only）
     task_queue = get_task_queue()
     task = task_queue.get_task(task_id)
     
-    if task:
+    if task and getattr(task, "asset_type", "stock") == "stock":
         return TaskStatus(
             task_id=task.task_id,
             status=task.status.value,
@@ -430,11 +435,11 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             error=task.error,
         )
     
-    # 2. 从数据库查询已完成的记录
+    # 2. 从数据库查询已完成的 stock 记录
     try:
         from src.storage import DatabaseManager
         db = DatabaseManager.get_instance()
-        records = db.get_analysis_history(query_id=task_id, limit=1)
+        records = db.get_analysis_history(query_id=task_id, asset_type="stock", limit=1)
 
         if records:
             record = records[0]

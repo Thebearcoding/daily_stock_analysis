@@ -1,9 +1,9 @@
 # 基金分析功能 - 修订版架构设计文档
 
 > **维护者**：Thebearcoding  
-> **最后更新**：2026-03-14  
-> **状态**：Phase 0+1 完成，Phase 2-6 方案重拆中  
-> **说明**：本版用于替换旧的 Phase 2-4 路线，重点修正持久化归属、`report_type` 语义、历史适配层和异步接入点 4 个阻断问题。
+> **最后更新**：2026-03-15  
+> **状态**：按当前分支代码，Phase 2A/2B/3/3B/4 的后端主链路已基本落地；Phase 5 前端 Dark Dock 重构未完成，基金 Markdown/前端历史闭环仍待补齐  
+> **说明**：本文档同时承担两类职责：一是记录基金功能的目标架构；二是标注当前分支的实际落地进度，避免把旧规划状态误当成当前实现状态。
 
 ---
 
@@ -73,11 +73,24 @@ FundAdvicePage 历史侧栏 / 详情页
 |------|----------|
 | 场外基金 -> ETF 映射 | ✅ 已有 |
 | 技术面规则建议 | ✅ 已有 |
-| deep 模式调用股票分析服务 | ✅ 已有，但调用链粗糙 |
+| deep 模式调用股票分析服务 | ✅ 已有 |
 | 同步基金接口 | ✅ `GET /api/v1/funds/{fund_code}/advice` |
-| 基金独立页面 | ✅ 已有，但 UI 未融入主站 |
+| 基金持久化入口 | ✅ `POST /api/v1/funds/analyze`（同步/异步均已接通） |
+| 基金任务状态 / 列表 / SSE | ✅ `GET /api/v1/funds/status/{task_id}` / `GET /api/v1/funds/tasks` / `GET /api/v1/funds/tasks/stream` |
+| 基金历史列表 / 详情 | ✅ `GET /api/v1/funds/history` / `GET /api/v1/funds/history/{record_id}` |
+| 基金持仓接口 | ✅ `GET /api/v1/funds/{fund_code}/holdings` / `GET /api/v1/funds/history/{record_id}/holdings` |
+| 基金 Markdown 历史接口 | ❌ 尚未落地，`HistoryService` 当前明确返回 `markdown_available=False` |
+| 基金独立页面 | ✅ `/funds` 已有基础页，但仍是同步结果页，尚未融入主站 Dark Dock 任务/历史交互 |
 
-### 2.2 旧路线的问题
+### 2.2 当前代码现状（2026-03-15）
+
+结合当前分支代码，实际状态可总结为：
+
+1. **后端主链路已明显前进到 Phase 4**：基金单 owner 持久化、历史读模型、持仓接口、异步任务队列都已在代码中实现。
+2. **前端仍停留在 Phase 5 之前的铺垫状态**：`/funds` 页面、前端 API client、TS types 都已准备好，但页面本身还没有接入任务列表、历史列表、详情抽屉和 Markdown 抽屉。
+3. **文档里的旧 Phase 勾选状态已过时**：下面的路线图会继续保留“目标/验收标准”，但状态标记已按当前代码更新。
+
+### 2.3 旧路线的问题
 
 | 问题 | 旧方案风险 | 修订方向 |
 |------|------------|----------|
@@ -86,7 +99,7 @@ FundAdvicePage 历史侧栏 / 详情页
 | 历史链路全是 stock-shaped | 直接复用会导致 detail/markdown/UI 错位 | 先加基金专用 read model |
 | 异步入口写到 `task_service.py` | 实际 Web API 不会生效 | 改为接入 `task_queue.py` |
 
-### 2.3 本次修订原则
+### 2.4 本次修订原则
 
 1. **保留现有股票 API、历史、SSE 契约**
 2. **基金先走独立 API 读模型，内部共享通用基础设施**
@@ -447,12 +460,15 @@ AnalysisService.analyze_stock(persist_history=...)
 
 ### 7.2 基金历史接口
 
-新增：
+当前已实现：
 
 - `GET /api/v1/funds/history`
 - `GET /api/v1/funds/history/{record_id}`
-- `GET /api/v1/funds/history/{record_id}/markdown`
 - `GET /api/v1/funds/history/{record_id}/holdings`
+
+当前未实现：
+
+- `GET /api/v1/funds/history/{record_id}/markdown`
 
 首版不新增：
 
@@ -689,7 +705,7 @@ AI 追问建议放到最后一期处理。
 - `fund_advice_service.py`: 提取公共方法 / 置信度语义 / MACD 文档化
 - `funds.py`: FastAPI DI
 
-### 🔲 Phase 2A: 领域模型与表结构修正
+### ✅ Phase 2A: 领域模型与表结构修正
 
 目标：先修正概念模型，避免继续在错误字段上叠功能。
 
@@ -706,7 +722,12 @@ AI 追问建议放到最后一期处理。
 - 数据模型稳定
 - stock 路径完全兼容
 
-### 🔲 Phase 2B: 基金持久化单 owner 落地
+当前实现备注：
+
+- `AnalysisHistory` 已包含 `asset_type` / `analysis_kind` / `analysis_mode` / `input_code` / `input_name`
+- `src/storage.py` 已补基金写入约束校验与 `save_fund_advice_history()`
+
+### ✅ Phase 2B: 基金持久化单 owner 落地
 
 目标：把“deep 已自动写股票历史”的隐式行为收回来。
 
@@ -723,7 +744,12 @@ AI 追问建议放到最后一期处理。
 - 同一笔 deep 基金请求只生成 1 条基金历史
 - 不再额外生成 ETF 风格重复记录
 
-### 🔲 Phase 3: 基金历史专用读模型
+当前实现备注：
+
+- `FundAdviceService.analyze_and_persist()` 已作为基金持久化 owner
+- deep 基金分析写库已转为基金入口负责
+
+### 🟡 Phase 3: 基金历史专用读模型
 
 目标：打通基金历史列表、详情和 Markdown。
 
@@ -740,7 +766,12 @@ AI 追问建议放到最后一期处理。
 - detail 页能展示 mapping、rule_assessment、strategy、deep_analysis
 - markdown 使用基金模板生成成功
 
-### 🔲 Phase 3B: 基金对应股票抓取
+当前实现备注：
+
+- 后端历史列表/详情接口与 adapter 已落地
+- 基金 Markdown 历史接口尚未实现，前端也还未接 history UI
+
+### 🟡 Phase 3B: 基金对应股票抓取
 
 目标：给基金页和历史详情补上“对应股票/成分股”能力，但不夸大为实时完整持仓。
 
@@ -758,7 +789,12 @@ AI 追问建议放到最后一期处理。
 - 主动基金如果只有披露持仓，也能明确标注“披露快照”
 - 前端能展示 `source_type / as_of_date / completeness`
 
-### 🔲 Phase 4: 基金异步任务接入共享队列
+当前实现备注：
+
+- `FundHoldingsService` 与 holdings endpoints 已落地
+- 当前仍属于“后端完成、前端未接”的状态
+
+### 🟡 Phase 4: 基金异步任务接入共享队列
 
 目标：让 deep 分析不再阻塞前端。
 
@@ -776,6 +812,12 @@ AI 追问建议放到最后一期处理。
 - SSE 可收到基金任务事件
 - 任务完成后可直接打开对应历史记录
 
+当前实现备注：
+
+- 后端 `AnalysisTaskQueue` 基金分支、fund task status/list/stream API 已完成
+- 前端 `apps/dsa-web/src/api/funds.ts` 与 `apps/dsa-web/src/types/funds.ts` 已有对应调用和类型
+- `FundAdvicePage` 仍未统一切到 `POST /api/v1/funds/analyze` 作为主入口，任务/历史闭环尚未接上
+
 ### 🔲 Phase 5: 前端 Dark Dock 重构
 
 目标：把基金页融入主站交互体验。
@@ -790,6 +832,12 @@ AI 追问建议放到最后一期处理。
 
 - 桌面/移动端都可正常使用
 - 支持输入、任务、历史、详情完整闭环
+
+当前实现备注：
+
+- `/funds` 路由与 `FundAdvicePage.tsx` 已存在，但当前仍是同步 `getAdvice()` 结果页
+- `apps/dsa-web/src/api/funds.ts`、`apps/dsa-web/src/types/funds.ts` 已为 Phase 5 提前铺好 API 与类型
+- `FundHistoryList` / `FundAdviceSummaryCard` / `FundMarkdownDrawer` 仍未创建
 
 ### 🔲 Phase 6: Agent 追问与可选通知
 
@@ -890,16 +938,16 @@ npm run build
 |------|------|
 | [`src/services/fund_mapping.py`](../../src/services/fund_mapping.py) | 基金 -> ETF 映射 |
 | [`src/services/fund_advice_service.py`](../../src/services/fund_advice_service.py) | 基金建议生成与持久化 owner |
-| [`src/services/fund_holdings_service.py`](../../src/services/fund_holdings_service.py) | 基金对应股票/成分股抓取服务（待新增） |
+| [`src/services/fund_holdings_service.py`](../../src/services/fund_holdings_service.py) | 基金对应股票/成分股抓取服务 |
 | [`src/services/analysis_service.py`](../../src/services/analysis_service.py) | 股票 deep 分析服务，需支持 `persist_history=False` |
 | [`src/services/history_service.py`](../../src/services/history_service.py) | 股票/基金历史 read model adapter |
 | [`src/services/task_queue.py`](../../src/services/task_queue.py) | Web API 异步任务队列 |
 | [`src/storage.py`](../../src/storage.py) | `AnalysisHistory` 表结构与存储实现 |
 | [`api/v1/endpoints/funds.py`](../../api/v1/endpoints/funds.py) | 基金同步/异步/history API |
 | [`api/v1/schemas/funds.py`](../../api/v1/schemas/funds.py) | 基金响应与历史 schema |
-| [`apps/dsa-web/src/pages/FundAdvicePage.tsx`](../../apps/dsa-web/src/pages/FundAdvicePage.tsx) | 基金页面 |
-| [`apps/dsa-web/src/api/funds.ts`](../../apps/dsa-web/src/api/funds.ts) | 基金前端 API Client |
-| [`apps/dsa-web/src/types/funds.ts`](../../apps/dsa-web/src/types/funds.ts) | 基金 TS 类型 |
+| [`apps/dsa-web/src/pages/FundAdvicePage.tsx`](../../apps/dsa-web/src/pages/FundAdvicePage.tsx) | 当前基金基础页（同步查询 UI，尚未完成 Phase 5 重构） |
+| [`apps/dsa-web/src/api/funds.ts`](../../apps/dsa-web/src/api/funds.ts) | 基金前端 API Client（已包含 analyze/task/history 调用） |
+| [`apps/dsa-web/src/types/funds.ts`](../../apps/dsa-web/src/types/funds.ts) | 基金 TS 类型（已包含 task/history 类型） |
 | [`tests/fund_advice_service_tests.py`](../../tests/fund_advice_service_tests.py) | 现有基金服务测试 |
 | [`tests/fund_mapping_tests.py`](../../tests/fund_mapping_tests.py) | 现有基金映射测试 |
 

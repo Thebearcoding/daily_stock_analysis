@@ -37,11 +37,23 @@
 | 策略 | 市场策略系统 | 内置 A股「三段式复盘策略」与美股「Regime Strategy」，输出进攻/均衡/防守或 risk-on/neutral/risk-off 计划，并附“仅供参考，不构成投资建议”提示 |
 | 复盘 | 大盘复盘 | 每日市场概览、板块涨跌；支持 cn(A股)/us(美股)/both(两者) 切换 |
 | 智能导入 | 多源导入 | 支持图片、CSV/Excel 文件、剪贴板粘贴；Vision LLM 提取代码+名称；置信度分层确认；名称→代码解析（本地+拼音+AkShare） |
-| 历史记录 | 批量管理 | 支持多选、全选及批量删除历史分析记录，优化管理效率与 UI/UX 体验 |
+| 历史记录 | 批量管理 | 支持多选、全选及批量删除历史分析记录；股票/基金历史分流展示，基金历史保留原基金与映射 ETF 身份；基金分析支持异步任务队列（`async_mode=True`），SSE 实时推送 |
 | 回测 | AI 回测验证 | 自动评估历史分析准确率，方向胜率、止盈止损命中率 |
 | **Agent 问股** | **策略对话** | **多轮策略问答，支持均线金叉/缠论/波浪等 11 种内置策略，Web/Bot/API 全链路** |
 | 推送 | 多渠道通知 | 企业微信、飞书、Telegram、钉钉、邮件、Pushover |
 | 自动化 | 定时运行 | GitHub Actions 定时执行，无需服务器 |
+
+> 基金分析当前状态：后端已支持 `GET /api/v1/funds/{fund_code}/advice`、`POST /api/v1/funds/analyze`、基金 task/history/holdings API 与 SSE；Web 端 `/funds` 目前仍是基础同步页，Dark Dock 风格的任务/历史/详情闭环仍在后续迭代中完成。详细设计与当前落地进度见 [docs/architecture/fund_feature.md](docs/architecture/fund_feature.md)。
+
+> 基金映射策略已收紧：主动混合类场外基金不再被强制映射到行业 ETF。未映射 ETF 的主动基金现在走独立的净值分析路径（`FundNavService` + `FundNavAnalyzer`），基于历史净值 MA/MACD/RSI/收益率/波动率/回撤生成投资建议。
+
+> 主动基金 advice 现已支持“披露持仓增强”：在净值分析主链路之外，系统会结合季度披露持仓生成主题/集中度摘要，用于增强 `confidence / reasons / risk_factors / position_advice`；该增强只作为辅助判断，不会把披露持仓伪装成实时仓位。
+
+> 基金分析链路已补齐并发抓取硬化：基金映射、基金名称解析与净值路径会复用缓存结果，并对 `akshare` 基金元信息调用做进程内串行保护，降低 advice / holdings / async analyze 同时触发时的崩溃概率。
+
+> 基金 `POST /api/v1/funds/analyze` 成功后现在会复用现有通知渠道（企业微信 / 飞书 / Telegram / 邮件等）自动推送基金分析摘要；`GET /api/v1/funds/{fund_code}/advice` 仍保持无状态，不会触发通知。
+
+> 若要把 DSA 接进 openclaw / 飞书金融助手，现已提供统一的股票+基金 Skill 模板与独立金融实例配置示例，见 [docs/openclaw-skill-integration.md](docs/openclaw-skill-integration.md) 与 [docs/examples/openclaw/](docs/examples/openclaw/)。
 
 > 历史报告详情会优先展示 AI 返回的原始「狙击点位」文本，避免区间价、条件说明等复杂内容在历史回看时被压缩成单个数字。
 
@@ -88,6 +100,8 @@
 > 详细配置说明见 [LLM 配置指南](docs/LLM_CONFIG_GUIDE.md)（三层配置、渠道模式、YAML高级配置、Vision、Agent、排错），GitHub Actions用户也可以实现YAML高级配置。进阶用户可配置 `LITELLM_MODEL`、`LITELLM_FALLBACK_MODELS` 或 `LLM_CHANNELS` 多渠道模式。
 
 > 现在推荐把多模型配置统一写成 `LLM_CHANNELS + LLM_<NAME>_PROTOCOL/BASE_URL/API_KEY/MODELS/ENABLED`。Web 设置页和 `.env` 使用同一套字段，便于相互切换。
+
+> Web 设置页的 LLM 渠道“连接测试”已兼容 GPT-5 系列：系统会自动省略 `temperature=0` 这类不被 GPT-5 支持的探活参数，避免配置正确却测试误报失败。
 
 > 💡 **推荐 [AIHubMix](https://aihubmix.com/?aff=CfMq)**：一个 Key 即可使用 Gemini、GPT、Claude、DeepSeek 等全球主流模型，无需科学上网，含免费模型（glm-5、gpt-4o-free 等），付费模型高稳定性无限并发。本项目可享 **10% 充值优惠**。
 

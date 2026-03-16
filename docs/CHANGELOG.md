@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - 🗑️ **History batch deletion** — Web UI now supports multi-selection and batch deletion of analysis history; added `POST /api/v1/history/batch-delete` endpoint and `ConfirmDialog` component.
 - 🔐 **Auth settings API** — new `POST /api/v1/auth/settings` endpoint to enable or disable Web authentication at runtime and set the initial admin password when needed
+- 🔄 **Fund async task queue (Phase 4)** — `POST /api/v1/funds/analyze` now supports `async_mode=True` for non-blocking deep analysis; new `GET /api/v1/funds/status/{task_id}`, `GET /api/v1/funds/tasks`, `GET /api/v1/funds/tasks/stream` endpoints; shared `AnalysisTaskQueue` with asset-aware dedup key (`asset_type:code`) and fund-only SSE filtering; fund completed-task status returns fund-shaped result (not stock `AnalysisResultResponse`)
+- 📦 **Fund holdings backend (Phase 3B)** — `GET /api/v1/funds/{fund_code}/holdings` and `GET /api/v1/funds/history/{record_id}/holdings` endpoints; `fund_holdings_snapshot` table; `FundHoldingsService` with `fund_disclosed_holdings` source type
+- 🧮 **Fund NAV independent analysis (Phase 5)** — active/OTC funds that don't map to an ETF now follow an independent NAV analysis path (`FundNavService` + `FundNavAnalyzer`), producing investment advice based on MA/MACD/RSI/returns/volatility/drawdown from historical NAV data; explicit routing in `FundAdviceService` — no more fallback-based; deep mode degrades gracefully for NAV path funds
+- 🧭 **Fund holdings-aware enhancement** — NAV-path fund advice now incorporates a lightweight disclosed-holdings summary (`dominant_themes` / `concentration_level` / `holdings_signal`) to enhance `confidence_score`, `reasons`, `risk_factors`, `strategy.position_advice`, and history detail `analysis_context` without pretending quarterly holdings are real-time positions
+- 🔔 **Fund analyze notification integration** — successful `POST /api/v1/funds/analyze` runs (sync + async) now reuse the existing notification channels to push a fund-specific summary report, while `GET /api/v1/funds/{fund_code}/advice` remains stateless and notification-free
+- 🧩 **openclaw finance skill templates** — added a unified stock+fund openclaw skill template plus `openclaw.finance.json` example, and expanded the integration guide with dedicated finance-instance + Feishu deployment recommendations
 
 ### Changed
 - 🔐 **Auth password state semantics** — stored password existence is now tracked independently from auth enablement; when auth is disabled, `/api/v1/auth/status` returns `passwordSet=false` while preserving the saved password for future re-enable
@@ -20,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - 🐛 **Session secret rotation on Windows** — use atomic replace so auth toggles invalidate existing sessions even when `.session_secret` already exists
 - 🐛 **Auth toggle atomicity** — persist `ADMIN_AUTH_ENABLED` before rotating session secret; on rotation failure, roll back to the previous auth state
+- 🐛 **Fund history identity and stock history isolation** — `/api/v1/history` no longer mixes in fund records, and fund history now persists the mapped analysis target name separately from the original fund input name
+- 🐛 **Fund ETF mapping no longer misfires on generic name terms** — active mixed OTC funds now skip automatic ETF mapping when the fund name only contains generic suffixes such as “证券 / 基金 / 混合 / 发起式”; holdings fall back to disclosed-positions semantics instead of forcing a sector ETF
+- 🐛 **Fund metadata concurrency hardening** — fund mapping / NAV name resolution now serialize unstable akshare metadata calls (`fund_individual_basic_info_xq` / `fund_name_em`) with a shared in-process lock and reuse cached fund names, preventing concurrent advice/holdings/analyze requests from crashing the backend process
+- 🐛 **GPT-5 channel test compatibility** — Web 设置页 / `POST /api/v1/system/config/llm/test-channel` now omits `temperature=0` for GPT-5 series models, avoiding LiteLLM `UnsupportedParamsError` false negatives during connection testing
 - openclaw Skill 集成指南 — 新增 [docs/openclaw-skill-integration.md](openclaw-skill-integration.md)，说明如何通过 openclaw Skill 调用 DSA API
 - ⚙️ **LLM channel protocol/test UX** — `.env` and Web settings now share the same channel shape (`LLM_CHANNELS` + `LLM_<NAME>_PROTOCOL/BASE_URL/API_KEY/MODELS/ENABLED`); settings page adds per-channel connection testing, primary/fallback/vision model selection, and protocol-aware model prefixing
 

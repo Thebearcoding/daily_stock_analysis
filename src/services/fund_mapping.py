@@ -16,7 +16,7 @@ import logging
 import re
 import time
 import threading
-from typing import List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,11 @@ _mapping_executor = ThreadPoolExecutor(max_workers=1)
 _mapping_cache: Dict[str, Tuple[Optional[Tuple[str, str, str]], float]] = {}
 _mapping_cache_lock = threading.Lock()
 _CACHE_TTL_SECONDS = 86400  # 24 小时
+
+# 基金元信息串行保护与缓存，避免并发调用 akshare/雪球接口导致 native crash
+_fund_metadata_lock = threading.RLock()
+_fund_metadata_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
+_fund_metadata_cache_lock = threading.Lock()
 
 
 # 常见场外基金 → ETF 静态映射（作为API查询的兜底）
@@ -116,6 +121,26 @@ INDEX_ETF_MAP: Dict[str, str] = {
     "机器人": "562500",
     "家电": "159996",
 }
+
+# 基金全称里常见的通用后缀/噪音词，不应用于 ETF 主题匹配
+FUND_NAME_GENERIC_TERMS: Tuple[str, ...] = (
+    "证券投资基金",
+    "发起式",
+    "混合型",
+    "混合",
+    "投资",
+    "证券",
+    "基金",
+    "份额",
+    "A类",
+    "C类",
+    "A",
+    "C",
+)
+
+# 主动混合基金优先走“无映射 / 披露持仓”路径，避免被基金全称中的通用词误映射
+ACTIVE_MIXED_NAME_MARKERS: Tuple[str, ...] = ("混合",)
+PASSIVE_NAME_MARKERS: Tuple[str, ...] = ("指数", "联接", "ETF", "LOF", "增强", "被动")
 
 
 def is_otc_fund_code(code: str) -> bool:
@@ -203,6 +228,99 @@ def get_fund_etf_mapping(fund_code: str) -> Optional[Tuple[str, str, str]]:
         return None
 
 
+def _get_cached_fund_metadata(fund_code: str) -> Optional[Dict[str, Any]]:
+    """读取基金元信息缓存。"""
+    now = time.monotonic()
+    with _fund_metadata_cache_lock:
+        cached = _fund_metadata_cache.get(fund_code)
+        if not cached:
+            return None
+        payload, cached_at = cached
+        if now - cached_at < _CACHE_TTL_SECONDS:
+            logger.info(f"fund_metadata_cache hit: {fund_code}")
+            return dict(payload)
+        del _fund_metadata_cache[fund_code]
+    return None
+
+
+def _set_fund_metadata_cache(fund_code: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """写入基金元信息缓存。"""
+    normalized = {
+        "fund_name": payload.get("fund_name") or "",
+        "benchmark": payload.get("benchmark") or "",
+        "fund_type": payload.get("fund_type") or "",
+    }
+    with _fund_metadata_cache_lock:
+        _fund_metadata_cache[fund_code] = (normalized, time.monotonic())
+    return dict(normalized)
+
+
+def _query_fund_metadata_via_akshare(fund_code: str) -> Dict[str, Any]:
+    """抓取基金元信息（名称 / 基准 / 类型），并在临界区内串行执行。"""
+    cached = _get_cached_fund_metadata(fund_code)
+    if cached is not None:
+        return cached
+
+    with _fund_metadata_lock:
+        logger.info(f"fund_metadata_lock acquired: {fund_code}")
+        cached = _get_cached_fund_metadata(fund_code)
+        if cached is not None:
+            return cached
+
+        try:
+            import akshare as ak
+
+            fund_info = ak.fund_individual_basic_info_xq(symbol=fund_code)
+            if fund_info is not None and not fund_info.empty:
+                info_dict = {}
+                for _, row in fund_info.iterrows():
+                    key = str(row.iloc[0]).strip() if len(row) > 0 else ""
+                    val = str(row.iloc[1]).strip() if len(row) > 1 else ""
+                    info_dict[key] = val
+
+                metadata = {
+                    "fund_name": info_dict.get("基金全称") or info_dict.get("基金简称") or "",
+                    "benchmark": info_dict.get("业绩比较基准") or "",
+                    "fund_type": info_dict.get("基金类型") or "",
+                }
+                if metadata["fund_name"]:
+                    return _set_fund_metadata_cache(fund_code, metadata)
+        except Exception as e:
+            logger.warning(f"[基金映射] 获取基金信息失败: {e}")
+
+        try:
+            fund_list = _get_fund_name_list()
+            fund_name = fund_list.get(fund_code) or ""
+            if fund_name:
+                return _set_fund_metadata_cache(
+                    fund_code,
+                    {"fund_name": fund_name, "benchmark": "", "fund_type": ""},
+                )
+        except Exception as e:
+            logger.debug(f"fund_name_em 获取基金名称失败: {e}")
+
+    return {"fund_name": "", "benchmark": "", "fund_type": ""}
+
+
+def get_fund_name(fund_code: str, allow_placeholder: bool = True) -> Optional[str]:
+    """获取基金名称，失败时可返回占位名。"""
+    metadata = _query_fund_metadata_via_akshare(fund_code)
+    fund_name = (metadata.get("fund_name") or "").strip()
+    if fund_name:
+        return fund_name
+    if allow_placeholder:
+        logger.info(f"fund_metadata_fallback_name used: {fund_code}")
+        return f"基金{fund_code}"
+    return None
+
+
+def execute_fund_data_call(label: str, callback):
+    """串行执行不稳定的基金 akshare 调用，避免并发触发 native crash。"""
+    with _fund_metadata_lock:
+        logger.info(f"fund_metadata_lock acquired: {label}")
+        return callback()
+
+
 def _query_fund_mapping_via_akshare(fund_code: str) -> Optional[Tuple[str, str, str]]:
     """通过 akshare API 查询基金信息并匹配ETF"""
     try:
@@ -212,38 +330,31 @@ def _query_fund_mapping_via_akshare(fund_code: str) -> Optional[Tuple[str, str, 
         return None
 
     # Step 1: 获取基金基本信息
-    fund_name = ""
-    benchmark = ""
-
-    try:
-        fund_info = ak.fund_individual_basic_info_xq(symbol=fund_code)
-        if fund_info is not None and not fund_info.empty:
-            info_dict = {}
-            for _, row in fund_info.iterrows():
-                key = str(row.iloc[0]).strip() if len(row) > 0 else ""
-                val = str(row.iloc[1]).strip() if len(row) > 1 else ""
-                info_dict[key] = val
-
-            fund_name = info_dict.get("基金全称", info_dict.get("基金简称", f"基金{fund_code}"))
-            benchmark = info_dict.get("业绩比较基准", "")
-            logger.info(f"[基金映射] {fund_code} 名称={fund_name}, 基准={benchmark}")
-    except Exception as e:
-        logger.warning(f"[基金映射] 获取基金信息失败: {e}")
-        # 尝试备用方法
-        try:
-            fund_list = _get_fund_name_list()
-            if fund_code in fund_list:
-                fund_name = fund_list[fund_code]
-        except Exception:
-            pass
+    metadata = _query_fund_metadata_via_akshare(fund_code)
+    fund_name = metadata.get("fund_name") or f"基金{fund_code}"
+    benchmark = metadata.get("benchmark") or ""
+    fund_type = metadata.get("fund_type") or ""
+    logger.info(f"[基金映射] {fund_code} 名称={fund_name}, 基准={benchmark}")
 
     if not fund_name:
         fund_name = f"基金{fund_code}"
 
+    normalized_name = _normalize_fund_name_for_matching(fund_name)
+
+    if _is_active_mixed_fund(fund_name=fund_name, fund_type=fund_type):
+        logger.info(
+            f"[基金映射] {fund_code}({fund_name}) 检测为主动混合基金，"
+            "跳过 ETF 映射，优先使用基金净值/披露持仓逻辑"
+        )
+        return None
+
     # Step 2: 优先从基金名称中匹配（名称比业绩基准更精确）
     for keyword, etf_code in INDEX_ETF_MAP.items():
-        if keyword in fund_name:
-            logger.info(f"[基金映射] {fund_code}({fund_name}) -> {etf_code} (基金名称匹配: {keyword})")
+        if normalized_name and keyword in normalized_name:
+            logger.info(
+                f"[基金映射] {fund_code}({fund_name}) -> {etf_code} "
+                f"(基金名称匹配: {keyword}, normalized={normalized_name})"
+            )
             return etf_code, fund_name, f"ETF{etf_code}"
 
     # Step 3: 从业绩基准中提取主要跟踪指数（按权重排序）
@@ -262,22 +373,56 @@ def _query_fund_mapping_via_akshare(fund_code: str) -> Optional[Tuple[str, str, 
         etf_list = ak.fund_etf_spot_em()
         if etf_list is not None and not etf_list.empty:
             # 从基金名称中提取可能的指数名
-            name_keywords = re.findall(r'[\u4e00-\u9fff]+', fund_name)
+            name_keywords = _extract_meaningful_name_keywords(normalized_name)
             for kw in name_keywords:
-                if len(kw) >= 2 and kw not in ['基金', '指数', '联接', '增强', 'LOF']:
-                    matches = etf_list[etf_list['名称'].str.contains(kw, na=False)]
-                    if not matches.empty:
-                        # 取成交额最大的ETF
-                        best = matches.sort_values('成交额', ascending=False).iloc[0]
-                        etf_code = str(best['代码'])
-                        etf_name = str(best['名称'])
-                        logger.info(f"[基金映射] {fund_code}({fund_name}) -> {etf_code}({etf_name}) (ETF列表匹配: {kw})")
-                        return etf_code, fund_name, etf_name
+                matches = etf_list[etf_list['名称'].str.contains(kw, na=False)]
+                if not matches.empty:
+                    # 取成交额最大的ETF
+                    best = matches.sort_values('成交额', ascending=False).iloc[0]
+                    etf_code = str(best['代码'])
+                    etf_name = str(best['名称'])
+                    logger.info(f"[基金映射] {fund_code}({fund_name}) -> {etf_code}({etf_name}) (ETF列表匹配: {kw})")
+                    return etf_code, fund_name, etf_name
     except Exception as e:
         logger.warning(f"[基金映射] ETF列表搜索失败: {e}")
 
     logger.warning(f"[基金映射] {fund_code}({fund_name}) 未找到对应ETF")
     return None
+
+
+def _normalize_fund_name_for_matching(fund_name: str) -> str:
+    """去掉基金全称里的通用词，避免误把“证券投资基金”等后缀当成行业主题。"""
+    normalized = fund_name
+    for term in FUND_NAME_GENERIC_TERMS:
+        normalized = normalized.replace(term, " ")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _extract_meaningful_name_keywords(normalized_name: str) -> List[str]:
+    """从已净化的基金名称中提取可用于 ETF 名称搜索的关键词。"""
+    if not normalized_name:
+        return []
+
+    keywords = re.findall(r'[\u4e00-\u9fff]{2,}', normalized_name)
+    seen = set()
+    result: List[str] = []
+    for keyword in keywords:
+        if keyword in seen:
+            continue
+        seen.add(keyword)
+        result.append(keyword)
+    return result
+
+
+def _is_active_mixed_fund(fund_name: str, fund_type: str) -> bool:
+    """识别主动混合基金，避免错误地强行映射到 ETF。"""
+    combined = f"{fund_name} {fund_type}"
+
+    has_active_marker = any(marker in combined for marker in ACTIVE_MIXED_NAME_MARKERS)
+    has_passive_marker = any(marker in combined for marker in PASSIVE_NAME_MARKERS)
+
+    return has_active_marker and not has_passive_marker
 
 
 
@@ -327,20 +472,26 @@ def _get_fund_name_list() -> Dict[str, str]:
     global _fund_name_cache, _fund_name_cache_time
     now = time.monotonic()
     if _fund_name_cache is not None and now - _fund_name_cache_time < _CACHE_TTL_SECONDS:
+        logger.info("fund_metadata_cache hit: fund_name_em")
         return _fund_name_cache
-    try:
-        import akshare as ak
-        df = ak.fund_name_em()
-        if df is not None and not df.empty:
-            _fund_name_cache = dict(zip(df['基金代码'].astype(str), df['基金简称']))
-            _fund_name_cache_time = now
+    with _fund_metadata_lock:
+        logger.info("fund_metadata_lock acquired: fund_name_em")
+        if _fund_name_cache is not None and now - _fund_name_cache_time < _CACHE_TTL_SECONDS:
+            logger.info("fund_metadata_cache hit: fund_name_em")
             return _fund_name_cache
-    except Exception:
-        pass
+        try:
+            import akshare as ak
+            df = ak.fund_name_em()
+            if df is not None and not df.empty:
+                _fund_name_cache = dict(zip(df['基金代码'].astype(str), df['基金简称']))
+                _fund_name_cache_time = now
+                return _fund_name_cache
+        except Exception:
+            pass
     return {}
 
 
-def resolve_code(code: str) -> Tuple[str, Optional[str], Optional[str]]:
+def resolve_code(code: str) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
     """
     统一代码解析入口
 
@@ -350,13 +501,14 @@ def resolve_code(code: str) -> Tuple[str, Optional[str], Optional[str]]:
         code: 用户输入的代码（可能是股票、ETF、或场外基金）
 
     Returns:
-        (analysis_code, original_fund_name, mapping_note)
+        (analysis_code, original_fund_name, analysis_name, mapping_note)
         - analysis_code: 用于分析的代码（ETF或股票）
         - original_fund_name: 原始基金名称（非基金则为None）
+        - analysis_name: 实际分析标的名称（ETF/股票名称，未知时为None）
         - mapping_note: 映射说明（如 "017811 → 516980 芯片ETF"）
     """
     if not is_otc_fund_code(code):
-        return code, None, None
+        return code, None, None, None
 
     logger.info(f"[代码解析] 检测到场外基金代码: {code}，开始查找对应ETF...")
 
@@ -365,7 +517,9 @@ def resolve_code(code: str) -> Tuple[str, Optional[str], Optional[str]]:
         etf_code, fund_name, etf_name = result
         note = f"场外基金 {code}({fund_name}) → 对应ETF {etf_code}({etf_name})"
         logger.info(f"[代码解析] {note}")
-        return etf_code, fund_name, note
+        return etf_code, fund_name, etf_name, note
 
-    logger.warning(f"[代码解析] 基金 {code} 未找到对应ETF，将尝试直接分析")
-    return code, None, None
+    fund_name = get_fund_name(code, allow_placeholder=True)
+    note = f"场外基金 {code}({fund_name}) 未映射ETF，直接按基金净值路径分析"
+    logger.warning(f"[代码解析] {note}")
+    return code, fund_name, fund_name, note

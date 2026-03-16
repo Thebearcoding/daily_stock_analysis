@@ -7,49 +7,62 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 主色调 - 青色
+        // 主色调 (Accent mapped to Terracotta)
         'cyan': {
-          DEFAULT: '#00d4ff',
-          dim: '#00a8cc',
-          glow: 'rgba(0, 212, 255, 0.4)',
+          DEFAULT: '#D68663',
+          dim: '#C57650',
+          glow: 'rgba(214, 134, 99, 0.2)',
         },
-        // 辅助色 - 紫色
+        // 辅助色
         'purple': {
-          DEFAULT: '#6f61f1',
-          dim: '#533483',
-          glow: 'rgba(168, 85, 247, 0.3)',
+          DEFAULT: '#8B7B74',
+          dim: '#7A6A63',
+          glow: 'rgba(139, 123, 116, 0.2)',
         },
         // 状态色
-        'success': '#00ff88',
-        'warning': '#ffaa00',
-        'danger': '#ff4466',
+        'success': '#059669',
+        'warning': '#D97706',
+        'danger': '#DC2626',
         // 背景色
-        'base': '#08080c',
-        'card': '#0d0d14',
-        'elevated': '#12121a',
-        'hover': '#1a1a24',
+        'base': '#F5F1E8',
+        'card': '#ECE4D8',
+        'elevated': '#E4D8C8',
+        'hover': '#EBC9B3',
         // 文字色
-        'primary': '#ffffff',
-        'secondary': '#a0a0b0',
-        'muted': '#606070',
+        'primary': '#111111',
+        'secondary': '#5B534B',
+        'muted': '#8C8276',
         // 边框色
         'border': {
-          dim: 'rgba(255, 255, 255, 0.06)',
-          DEFAULT: 'rgba(255, 255, 255, 0.1)',
-          accent: 'rgba(0, 212, 255, 0.3)',
-          purple: 'rgba(168, 85, 247, 0.3)',
+          dim: 'rgba(216, 205, 190, 0.4)',
+          DEFAULT: '#D8CDBE',
+          accent: '#D68663',
+          purple: '#8B7B74',
         },
+        // 新增专有暖色体系（可与 base/card 等混用）
+        'warm-bg': '#FAF9F6',
+        'warm-surface': '#FFFFFF',
+        'warm-surface-alt': '#F8F6F2',
+        'clay': {
+          DEFAULT: '#D68663',
+          soft: '#EBC9B3',
+        },
+        'charcoal': {
+          DEFAULT: '#111111',
+          muted: '#5B534B',
+        },
+        'warm-border': '#FAF9F6',
       },
       backgroundImage: {
-        'gradient-purple-cyan': 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)',
-        'gradient-card-border': 'linear-gradient(180deg, rgba(168, 85, 247, 0.4) 0%, rgba(168, 85, 247, 0.1) 50%, rgba(0, 212, 255, 0.2) 100%)',
-        'gradient-cyan': 'linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%)',
+        'gradient-purple-cyan': 'linear-gradient(135deg, rgba(214, 134, 99, 0.1) 0%, rgba(139, 123, 116, 0.1) 100%)',
+        'gradient-card-border': 'none',
+        'gradient-cyan': 'none',
       },
       boxShadow: {
-        'glow-cyan': '0 0 20px rgba(0, 212, 255, 0.4)',
-        'glow-purple': '0 0 20px rgba(168, 85, 247, 0.3)',
-        'glow-success': '0 0 20px rgba(0, 255, 136, 0.3)',
-        'glow-danger': '0 0 20px rgba(255, 68, 102, 0.3)',
+        'glow-cyan': '0 4px 12px rgba(214, 134, 99, 0.15)',
+        'glow-purple': '0 4px 12px rgba(139, 123, 116, 0.15)',
+        'glow-success': '0 4px 12px rgba(5, 150, 105, 0.15)',
+        'glow-danger': '0 4px 12px rgba(220, 38, 38, 0.15)',
       },
       borderRadius: {
         'xl': '12px',

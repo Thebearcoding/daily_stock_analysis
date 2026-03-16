@@ -157,10 +157,11 @@ class SystemConfigService:
         call_kwargs: Dict[str, Any] = {
             "model": resolved_model,
             "messages": [{"role": "user", "content": "Reply with OK"}],
-            "temperature": 0,
             "max_tokens": 8,
             "timeout": max(5.0, float(timeout_seconds)),
         }
+        if self._supports_zero_temperature_test(resolved_model):
+            call_kwargs["temperature"] = 0
         if selected_api_key:
             call_kwargs["api_key"] = selected_api_key
         if base_url.strip():
@@ -204,6 +205,16 @@ class SystemConfigService:
                 "resolved_model": resolved_model,
                 "latency_ms": None,
             }
+
+    @staticmethod
+    def _supports_zero_temperature_test(model: str) -> bool:
+        """
+        GPT-5 系列在当前 LiteLLM/OpenAI 兼容层下不支持 temperature=0。
+        连接测试仅用于探活，遇到这类模型时直接省略该参数即可。
+        """
+        normalized = (model or "").strip().lower()
+        model_name = normalized.split("/", 1)[-1]
+        return not model_name.startswith("gpt-5")
 
     def update(
         self,

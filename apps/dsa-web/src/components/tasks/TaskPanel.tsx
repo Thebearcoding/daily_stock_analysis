@@ -121,7 +121,6 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
 
   return (
     <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ${className}`}>
-    <div className={`bg-card rounded-xl border border-white/5 overflow-hidden ${className}`}>
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
         <div className="flex items-center gap-2">

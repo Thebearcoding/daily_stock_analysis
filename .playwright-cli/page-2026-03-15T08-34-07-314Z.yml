@@ -1,0 +1,70 @@
+- generic [ref=e3]:
+  - complementary "主导航":
+    - generic [ref=e4]:
+      - link "首页" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img [ref=e6]
+      - navigation "页面" [ref=e8]:
+        - link "股票" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+        - link "基金" [ref=e12] [cursor=pointer]:
+          - /url: /funds
+          - img [ref=e13]
+        - link "问股" [ref=e16] [cursor=pointer]:
+          - /url: /chat
+          - img [ref=e17]
+        - link "回测" [ref=e19] [cursor=pointer]:
+          - /url: /backtest
+          - img [ref=e20]
+        - link "设置" [ref=e22] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e23]
+  - main [ref=e26]:
+    - generic [ref=e28]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - text: 回测
+            - heading "回测工作台" [level=1] [ref=e33]
+            - paragraph [ref=e34]: 用固定观察窗口复盘历史分析建议，快速查看方向判断、模拟收益和止盈止损触发情况。
+          - generic [ref=e35]:
+            - generic [ref=e36]: 当前筛选：全部股票
+            - generic [ref=e37]: 观察窗口：-- 天
+            - generic [ref=e38]: 每页结果：20 条
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - text: 控制台
+            - heading "回测控制台" [level=2] [ref=e41]
+            - paragraph [ref=e42]: 支持按股票代码筛选，并指定回测观察窗口。
+          - generic [ref=e43]:
+            - generic [ref=e44]:
+              - text: 股票代码
+              - textbox "股票代码" [ref=e45]:
+                - /placeholder: 输入股票代码，留空则查看全部
+            - generic [ref=e46]:
+              - generic [ref=e47]:
+                - text: 观察窗口
+                - spinbutton "观察窗口" [ref=e48]
+              - button "强制重算" [ref=e49]: 强制重算
+            - generic [ref=e51]:
+              - button "应用筛选" [ref=e52] [cursor=pointer]
+              - button "开始回测" [ref=e53] [cursor=pointer]
+      - main [ref=e54]:
+        - complementary [ref=e55]:
+          - generic [ref=e57]:
+            - heading "还没有回测数据" [level=3] [ref=e58]
+            - paragraph [ref=e59]: 先执行一次回测，再查看整体表现、命中率和模拟收益。
+        - generic [ref=e61]:
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - text: 结果
+              - heading "历史结果" [level=2] [ref=e65]
+              - paragraph [ref=e66]: 查看每条分析建议在回测窗口中的方向表现、模拟收益和状态。
+            - generic [ref=e67]:
+              - generic [ref=e68]: 当前页：1/1
+              - generic [ref=e69]: 总记录：0
+          - generic [ref=e71]:
+            - img [ref=e73]
+            - heading "暂无回测结果" [level=3] [ref=e75]
+            - paragraph [ref=e76]: 先执行一次回测，系统会在这里展示历史建议的准确率、收益和止盈止损触发结果。

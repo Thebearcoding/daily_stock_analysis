@@ -10,9 +10,9 @@ interface SettingsAlertProps {
 }
 
 const variantStyles: Record<NonNullable<SettingsAlertProps['variant']>, string> = {
-  error: 'border-red-500/35 bg-red-500/10 text-red-200',
-  success: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200',
-  warning: 'border-amber-500/35 bg-amber-500/10 text-amber-200',
+  error: 'border-red-500/30 bg-red-50 text-red-700',
+  success: 'border-emerald-500/30 bg-emerald-50 text-emerald-700',
+  warning: 'border-amber-500/30 bg-amber-50 text-amber-700',
 };
 
 export const SettingsAlert: React.FC<SettingsAlertProps> = ({
